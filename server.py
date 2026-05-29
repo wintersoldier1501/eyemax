@@ -10,6 +10,130 @@ import datetime
 import fitz
 import shutil
 from functools import wraps
+import onnxruntime as ort
+import numpy as np
+from PIL import Image
+import urllib.request
+import io
+
+# ONNX Local Embeddings Config
+ORT_SESSION = None
+MODEL_PATH = "scratch/mobilenetv2.onnx"
+MODEL_URL = "https://huggingface.co/onnxmodelzoo/mobilenetv2-12/resolve/main/mobilenetv2-12.onnx"
+
+def initialize_onnx_model():
+    global ORT_SESSION
+    if ORT_SESSION is not None:
+        return
+        
+    print("Verificando modelo local ONNX de MobileNetV2...")
+    os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
+    if not os.path.exists(MODEL_PATH):
+        print(f"Descargando modelo ONNX desde {MODEL_URL}...")
+        try:
+            urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
+            print("Descarga del modelo exitosa.")
+        except Exception as e:
+            print(f"Error al descargar el modelo ONNX: {e}")
+            raise e
+            
+    print("Cargando sesión de ONNX Runtime...")
+    try:
+        ORT_SESSION = ort.InferenceSession(MODEL_PATH)
+        print("Modelo ONNX cargado exitosamente.")
+    except Exception as e:
+        print(f"Error al inicializar sesión de ONNX: {e}")
+        raise e
+
+def extract_image_vector(image_bytes):
+    """
+    Extrae un vector de 1000 dimensiones (logits) usando MobileNetV2 ONNX
+    a partir de los bytes de una imagen.
+    """
+    global ORT_SESSION
+    if ORT_SESSION is None:
+        try:
+            initialize_onnx_model()
+        except Exception as e:
+            print(f"No se pudo inicializar el modelo ONNX al extraer vector: {e}")
+            return None
+        
+    try:
+        img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+        
+        # Redimensionar a 224x224 (entrada de MobileNetV2)
+        img_resized = img.resize((224, 224), Image.Resampling.BILINEAR)
+        img_data = np.array(img_resized).astype(np.float32)
+        
+        # Transponer de HWC a CHW (3, 224, 224)
+        img_data = img_data.transpose(2, 0, 1)
+        
+        # Normalizar con la media y desviación estándar de ImageNet
+        mean = np.array([0.485, 0.456, 0.406]).reshape(3, 1, 1)
+        std = np.array([0.229, 0.224, 0.225]).reshape(3, 1, 1)
+        img_data = (img_data / 255.0 - mean) / std
+        
+        # Agregar dimensión de lote (1, 3, 224, 224)
+        input_data = np.expand_dims(img_data, axis=0).astype(np.float32)
+        
+        # Correr inferencia
+        input_name = ORT_SESSION.get_inputs()[0].name
+        outputs = ORT_SESSION.run(None, {input_name: input_data})
+        vector = outputs[0][0].tolist() # Convertir a lista de floats de Python
+        return vector
+    except Exception as e:
+        print(f"Error al extraer vector de la imagen: {e}")
+        return None
+
+def cosine_similarity(v1, v2):
+    if not v1 or not v2 or len(v1) != len(v2):
+        return 0.0
+    arr1 = np.array(v1)
+    arr2 = np.array(v2)
+    dot = np.dot(arr1, arr2)
+    norm1 = np.linalg.norm(arr1)
+    norm2 = np.linalg.norm(arr2)
+    if norm1 == 0.0 or norm2 == 0.0:
+        return 0.0
+    return float(dot / (norm1 * norm2))
+
+def migrate_training_history():
+    """
+    Recorre 'historial_entrenamiento.json' y para cada registro que no tenga
+    'vector_embeddings', lee la imagen local (si existe) y le calcula su embedding.
+    """
+    history_file = 'historial_entrenamiento.json'
+    if not os.path.exists(history_file):
+        return
+    print("Iniciando migración silenciosa de historial de entrenamiento para vectorización...")
+    try:
+        with open(history_file, 'r', encoding='utf-8') as f:
+            history = json.load(f)
+            
+        modified = False
+        for item in history:
+            if 'vector_embeddings' not in item:
+                image_path = item.get('image_path')
+                if image_path and os.path.exists(image_path):
+                    print(f"Migrando {image_path}...")
+                    try:
+                        with open(image_path, 'rb') as img_f:
+                            img_bytes = img_f.read()
+                        vector = extract_image_vector(img_bytes)
+                        if vector:
+                            item['vector_embeddings'] = vector
+                            modified = True
+                    except Exception as e:
+                        print(f"Error al migrar entrada {image_path}: {e}")
+                        
+        if modified:
+            with open(history_file, 'w', encoding='utf-8') as f:
+                json.dump(history, f, indent=2, ensure_ascii=False)
+            print("Migración de historial completada y guardada.")
+        else:
+            print("Historial ya estaba completamente migrado o vacío.")
+    except Exception as e:
+        print(f"Error durante la migración del historial: {e}")
 
 def get_queries_count():
     """Lee el archivo registro_consultas.json y retorna el número de consultas hechas hoy."""
@@ -369,17 +493,36 @@ def save_to_training_history(image_path, code):
     image_path_norm = image_path.replace("\\", "/")
     image_hash = compute_file_sha256(image_path)
     
+    # Calcular embedding vector
+    vector = None
+    if os.path.exists(image_path):
+        try:
+            with open(image_path, 'rb') as f:
+                img_bytes = f.read()
+            vector = extract_image_vector(img_bytes)
+        except Exception as err:
+            print(f"Error al extraer embedding para guardar en historial: {err}")
+
     # Verificar si el hash o ruta ya está en el historial para evitar duplicaciones
     for item in history:
         if (image_hash and item.get('image_hash') == image_hash) or (item.get('image_path') == image_path_norm):
-            # Si ya coincide con el código correcto, salir
+            # Si ya coincide con el código correcto, actualizar el vector y salir
             if item.get('codigo') == code:
                 print(f"[HISTORIAL] El archivo o hash ya existe con la misma clave: {code}")
+                if vector and 'vector_embeddings' not in item:
+                    item['vector_embeddings'] = vector
+                    try:
+                        with open(history_file, 'w', encoding='utf-8') as f:
+                            json.dump(history, f, indent=2, ensure_ascii=False)
+                    except Exception as e:
+                        print(f"Error al actualizar vector en historial existente: {e}")
                 return
             else:
                 # Si es un código diferente, actualizar
                 item['codigo'] = code
                 item['descripcion_visual'] = get_image_visual_description(image_path)
+                if vector:
+                    item['vector_embeddings'] = vector
                 try:
                     with open(history_file, 'w', encoding='utf-8') as f:
                         json.dump(history, f, indent=2, ensure_ascii=False)
@@ -415,6 +558,8 @@ def save_to_training_history(image_path, code):
         'codigo': code,
         'descripcion_visual': desc
     }
+    if vector:
+        new_record['vector_embeddings'] = vector
     
     history.append(new_record)
     try:
@@ -423,6 +568,7 @@ def save_to_training_history(image_path, code):
         print(f"[HISTORIAL] Guardado entrenamiento nuevo: {image_path_norm} -> {code} ({desc})")
     except Exception as e:
         print(f"Error al escribir en {history_file}: {e}")
+
 
 def load_diversified_training_examples(category_filter=None, limit=15):
     """Retorna ejemplos diversificados del historial de entrenamiento (máximo 1 foto por código único), filtrados opcionalmente por categoría."""
@@ -584,6 +730,64 @@ def recognize_product():
                 product_data['catalog_page_url'] = f"/api/catalog_page/{catalog_name}/{page_num}"
             return jsonify(product_data)
 
+    # Stage 2: Búsqueda por similitud de vectores locales (ONNX Runtime)
+    scanned_vector = extract_image_vector(image_bytes)
+    best_similarity = -1.0
+    best_match_item = None
+    
+    # Lista de candidatos prioritarios para Gemini (similitud entre 75% y 92%)
+    vector_candidates = []
+    
+    if scanned_vector:
+        history_file = 'historial_entrenamiento.json'
+        if os.path.exists(history_file):
+            try:
+                with open(history_file, 'r', encoding='utf-8') as f:
+                    history = json.load(f)
+                
+                # Agrupar las puntuaciones por código para encontrar el mejor score por producto
+                scores_by_code = {}
+                for item in history:
+                    item_vector = item.get('vector_embeddings')
+                    code = item.get('codigo')
+                    if item_vector and code:
+                        sim = cosine_similarity(scanned_vector, item_vector)
+                        if code not in scores_by_code or sim > scores_by_code[code]['sim']:
+                            scores_by_code[code] = {'sim': sim, 'item': item}
+                
+                # Encontrar el mejor en general
+                for code, data in scores_by_code.items():
+                    sim = data['sim']
+                    item = data['item']
+                    if sim > best_similarity:
+                        best_similarity = sim
+                        best_match_item = item
+                    
+                    # Si tiene similitud considerable, considerarlo candidato prioritario
+                    if 0.75 <= sim < 0.92:
+                        vector_candidates.append((code, sim))
+            except Exception as e:
+                print(f"Error al buscar similitud de vectores en historial: {e}")
+                
+        # Ordenar candidatos por mayor similitud
+        vector_candidates.sort(key=lambda x: x[1], reverse=True)
+        # Quedarse con los 3 mejores
+        vector_candidates = vector_candidates[:3]
+
+    if best_similarity >= 0.92 and best_match_item:
+        match_code = best_match_item.get('codigo')
+        print(f"[VECTOR MATCH] Coincidencia por vector de similitud: {best_similarity:.4f} con el código '{match_code}'. Bypasseando Gemini.")
+        product_data = get_product_by_code(match_code)
+        if product_data:
+            product_data['mode'] = 'VECTOR_EXACT_MATCH'
+            product_data['type'] = 'exact'
+            product_data['image_path'] = best_match_item.get('image_path', '')
+            product_data['vector_similarity'] = best_similarity
+            catalog_name, page_num = find_page_for_code(match_code)
+            if catalog_name and page_num:
+                product_data['catalog_page_url'] = f"/api/catalog_page/{catalog_name}/{page_num}"
+            return jsonify(product_data)
+
     # Guardar la imagen en el directorio de entrenamiento con un nombre único para el Feedback Loop
     import time
     os.makedirs('assets/entrenamiento', exist_ok=True)
@@ -705,6 +909,17 @@ def recognize_product():
             "Restringe tu comparación visual y extracción de códigos estrictamente a esos rangos de páginas para el catálogo respectivo. Si para un catálogo indica 'none', no busques en él."
         )
 
+        # Candidatos sugeridos por el modelo de similitud local
+        candidates_instruction = ""
+        if vector_candidates:
+            candidates_lines = [f"- Código '{code}' (Similitud visual por embedding: {sim*100:.1f}%)" for code, sim in vector_candidates]
+            candidates_instruction = (
+                "CANDIDATOS POTENCIALES POR SIMILITUD DE EMBEDDINGS LOCAL:\n"
+                "Nuestro modelo de similitud visual local sugiere altamente que la pieza escaneada podría ser una de las siguientes:\n"
+                + "\n".join(candidates_lines) + "\n"
+                "Por favor, revisa visualmente con prioridad estas opciones en el catálogo para ver si coinciden con la pieza escaneada.\n\n"
+            )
+
         print("Consultando a Gemini 3.5 Flash...")
         model = genai.GenerativeModel(
             model_name='gemini-3.5-flash',
@@ -715,6 +930,7 @@ def recognize_product():
                 "Encuentra la pieza en el catálogo que tenga exactamente la misma forma, color de metal, dijes y características visuales.\n"
                 "Extrae el código o Clave escrito en el PDF junto a esa pieza encontrada (ej. AX1362, COL294, etc.).\n\n"
                 f"{segmentation_instruction}\n\n"
+                f"{candidates_instruction}"
                 "MEMORIA DE ENTRENAMIENTO PREVIO (Fotos confirmadas por el usuario):\n"
                 "El equipo ha confirmado anteriormente que ciertas imágenes reales corresponden a los siguientes códigos. "
                 "Utiliza esta memoria para dar prioridad absoluta a estos códigos si la foto escaneada se asemeja visualmente al ejemplo provisto:\n"
@@ -1111,6 +1327,12 @@ def server_status():
 # Carga global de datos del inventario (necesario para importación WSGI/gunicorn en producción)
 load_inventory()
 initialize_gemini_catalogs()
+try:
+    initialize_onnx_model()
+    migrate_training_history()
+except Exception as e:
+    print(f"Advertencia al inicializar ONNX o migrar historial: {e}")
+
 
 if __name__ == '__main__':
     # Obtener el puerto dinámico (por defecto 8080)
