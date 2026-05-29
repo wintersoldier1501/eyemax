@@ -1,0 +1,48 @@
+[
+  {
+    "image_path": "assets/entrenamiento/img_1779992816_7741.jpg",
+    "codigo": "AX2420",
+    "image_hash": "b3ec0bcf4376696c4e8c925a9af748489936904370c80e0920bca46566923e48"
+  },
+  {
+    "image_path": "assets/entrenamiento/img_1779992883_6064.jpg",
+    "codigo": "AX2420",
+    "image_hash": "68eb66010ab4940e50ac28400db7633680ec1d44dad98a8c7ee4f77bb26c684b"
+  },
+  {
+    "image_path": "assets/entrenamiento/img_1779993343_3704.jpg",
+    "codigo": "AX2420",
+    "descripcion_visual": "Aquí están 5 palabras clave:  1.  **Llavero** 2.  **Mano** 3.  **Texto** 4.  **Dibujo** 5.  **Negro**",
+    "image_hash": "b3ec0bcf4376696c4e8c925a9af748489936904370c80e0920bca46566923e48"
+  },
+  {
+    "image_path": "assets/entrenamiento/img_1779993430_8607.jpg",
+    "codigo": "AX2420",
+    "descripcion_visual": "Aquí están 5 palabras clave:  1.  **Llavero** 2.  **Grabado** 3.  **Texto** 4.  **Dibujos** 5.  **Negro**",
+    "image_hash": "028d129368b4e8773a54560cb1bb8cd2c18db92918e93c81483122dae36a118a"
+  },
+  {
+    "image_path": "assets/entrenamiento/img_1780004407_1252.jpg",
+    "codigo": "AX1362-P",
+    "descripcion_visual": "joyeria",
+    "image_hash": "2e3d3435a754a3530dda27c621ab4125426b78928d093dbee4326a8597ac775c"
+  },
+  {
+    "image_path": "assets/entrenamiento/img_1780066800_4212.jpg",
+    "codigo": "AX2420",
+    "descripcion_visual": "Basándose en la imagen y los detalles, los rasgos estructurales permanentes de este objeto son:  1.  **Es un llavero:** Su propósito y diseño fundamental es ser un accesorio para llaves. 2.  **Tiene una argolla principal para llaves:** Una anilla de metal, típicamente en espiral (abierta para insertar llaves), que sirve como punto de sujeción principal. 3.  **Tiene un colgante/placa (tag):** Un objeto sólido y plano que se cuelga de la argolla. 4.  **Forma del colgante:** Es rectangular con las esquinas redondeadas. 5.  **Material del colgante:** Parece ser de un material metálico oscuro (posiblemente acero inoxidable pulido o similar). 6.  **Punto de conexión del colgante:** El colgante tiene una pequeña argolla o perforación en su parte superior que permite su unión a la anilla principal del llavero. 7.  **Presencia de grabado:** La superficie del colgante tiene grabado texto e imágenes, lo que es una característica estructural de su fabricación, independientemente del contenido específico del grabado. 8.  **Anilla intermedia:** Una pequeña anilla adicional conecta el colgante a la argolla principal del llavero.",
+    "image_hash": "b3ec0bcf4376696c4e8c925a9af748489936904370c80e0920bca46566923e48"
+  },
+  {
+    "image_path": "assets/entrenamiento/img_1780066923_8367.jpg",
+    "codigo": "AX2420",
+    "descripcion_visual": "joyeria",
+    "image_hash": "e213f856478a94e7fb80c418e46c4d838a21ee220cc936ad9ffe77489532b190"
+  },
+  {
+    "image_path": "assets/entrenamiento/img_1780071740_9367.jpg",
+    "image_hash": "524d7528cd3263d293b2c7401b0dc0c333feae4be57a485c7df718195a7284dc",
+    "codigo": "AX1362-P",
+    "descripcion_visual": "Pulsera de cuero negro trenzado con dos aros de acero."
+  }
+]

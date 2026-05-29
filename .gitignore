@@ -1,0 +1,17 @@
+# Entorno virtual y Python
+.venv/
+__pycache__/
+*.pyc
+
+# Variables de entorno locales (API keys, etc.)
+.env
+
+# Archivos de caché del servidor
+assets/cache_paginas/
+assets/cache_recortes/
+
+# Archivos temporales de Excel
+~$*
+
+# Directorio de scripts temporales
+scratch/

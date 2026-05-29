@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eyemax - Panel de Administración</title>
+    
+    <!-- Google Fonts: Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2 family=Outfit:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --color-bg-gradient-start: #0B0B0F;
+            --color-bg-gradient-end: #050508;
+            --color-gold: #E5C384;
+            --color-gold-light: #F5E6C4;
+            --color-dark-card: #12121E;
+            --color-border: #1E1E2F;
+            --color-text-primary: #FFFFFF;
+            --color-text-secondary: #8E8E9F;
+            --color-green: #00E676;
+            --color-red: #FF1744;
+            --color-shadow: rgba(229, 195, 132, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background: #050508;
+            background: linear-gradient(135deg, var(--color-bg-gradient-start) 0%, var(--color-bg-gradient-end) 100%);
+            min-height: 100vh;
+            color: var(--color-text-primary);
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .admin-container {
+            width: 100%;
+            max-width: 900px;
+            background: #09090E;
+            border: 1px solid #1C1C28;
+            border-radius: 24px;
+            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.8);
+            padding: 30px;
+            display: none; /* Oculto hasta autenticarse */
+            flex-direction: column;
+            gap: 24px;
+            animation: fadeIn 0.4s ease;
+        }
+
+        /* Bloqueo por PIN */
+        .login-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(5, 5, 8, 0.95);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            backdrop-filter: blur(10px);
+        }
+
+        .login-card {
+            background: #0C0C14;
+            border: 1px solid var(--color-border);
+            border-radius: 20px;
+            padding: 40px;
+            width: 320px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+            text-align: center;
+        }
+
+        .login-title {
+            color: var(--color-gold);
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .login-input {
+            width: 100%;
+            background: #050508;
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
+            padding: 14px;
+            color: white;
+            font-size: 24px;
+            font-weight: 700;
+            text-align: center;
+            letter-spacing: 10px;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        .login-input:focus {
+            border-color: var(--color-gold);
+            box-shadow: 0 0 10px rgba(229, 195, 132, 0.2);
+        }
+
+        .login-btn {
+            width: 100%;
+            background: var(--color-gold);
+            border: none;
+            border-radius: 12px;
+            padding: 14px;
+            color: #0F0F1A;
+            font-weight: 700;
+            font-size: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .login-btn:hover {
+            background: var(--color-gold-light);
+            transform: scale(1.02);
+        }
+
+        /* Header */
+        header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand svg {
+            width: 32px;
+            height: 32px;
+            fill: var(--color-gold);
+        }
+
+        .brand h1 {
+            font-size: 22px;
+            font-weight: 900;
+            color: var(--color-gold);
+            letter-spacing: 1.5px;
+        }
+
+        .logout-btn {
+            background: rgba(255, 23, 68, 0.1);
+            border: 1px solid rgba(255, 23, 68, 0.3);
+            border-radius: 10px;
+            color: #FF1744;
+            padding: 8px 16px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: all 0.2s;
+        }
+
+        .logout-btn:hover {
+            background: #FF1744;
+            color: white;
+        }
+
+        /* Tabs de Navegación */
+        .tabs {
+            display: flex;
+            background: rgba(29, 29, 53, 0.45);
+            border: 1px solid var(--color-border);
+            border-radius: 14px;
+            padding: 4px;
+            width: 100%;
+        }
+
+        .tab {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--color-text-secondary);
+            font-size: 14px;
+            font-weight: 600;
+            padding: 12px 0;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            outline: none;
+        }
+
+        .tab.active {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--color-text-primary);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        /* Áreas de Contenido */
+        .tab-content {
+            display: none;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .tab-content.active {
+            display: flex;
+        }
+
+        .section-card {
+            background: var(--color-dark-card);
+            border: 1px solid var(--color-border);
+            border-radius: 18px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--color-gold);
+            letter-spacing: 0.5px;
+            border-bottom: 1px dashed rgba(229, 195, 132, 0.15);
+            padding-bottom: 8px;
+        }
+
+        /* Drag and Drop Zone */
+        .dropzone-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+        }
+
+        .dropzone {
+            background: rgba(15, 15, 26, 0.6);
+            border: 2px dashed var(--color-border);
+            border-radius: 14px;
+            padding: 30px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .dropzone:hover, .dropzone.dragover {
+            border-color: var(--color-gold);
+            background: rgba(229, 195, 132, 0.03);
+        }
+
+        .dropzone-icon {
+            font-size: 32px;
+            color: var(--color-text-secondary);
+        }
+
+        .dropzone-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: white;
+        }
+
+        .dropzone-desc {
+            font-size: 10px;
+            color: var(--color-text-secondary);
+        }
+
+        .progress-bar-container {
+            width: 100%;
+            height: 4px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 2px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .progress-bar {
+            width: 0%;
+            height: 100%;
+            background: var(--color-gold);
+            transition: width 0.3s;
+        }
+
+        /* Configuración de páginas por categoría */
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 12px;
+        }
+
+        .config-row {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            background: rgba(15, 15, 26, 0.5);
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
+            padding: 12px;
+        }
+
+        .config-category-name {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--color-gold-light);
+            text-transform: uppercase;
+        }
+
+        .config-inputs-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .config-input-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .config-input-label {
+            font-size: 9px;
+            color: var(--color-text-secondary);
+            text-transform: uppercase;
+        }
+
+        .config-input {
+            background: rgba(5, 5, 8, 0.7);
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            padding: 8px;
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+            outline: none;
+            transition: border 0.2s;
+        }
+
+        .config-input:focus {
+            border-color: var(--color-gold);
+        }
+
+        .save-btn {
+            background: var(--color-gold);
+            border: none;
+            border-radius: 12px;
+            color: #0F0F1A;
+            padding: 14px;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            align-self: flex-end;
+            margin-top: 10px;
+        }
+
+        .save-btn:hover {
+            background: var(--color-gold-light);
+            transform: translateY(-1px);
+        }
+
+        /* Historial de entrenamiento */
+        .history-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 16px;
+            max-height: 500px;
+            overflow-y: auto;
+            padding-right: 8px;
+        }
+
+        .history-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        .history-list::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.01);
+        }
+        .history-list::-webkit-scrollbar-thumb {
+            background: var(--color-border);
+            border-radius: 3px;
+        }
+
+        .history-item {
+            background: rgba(15, 15, 26, 0.6);
+            border: 1px solid var(--color-border);
+            border-radius: 14px;
+            padding: 12px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            position: relative;
+            transition: border-color 0.2s;
+        }
+
+        .history-item:hover {
+            border-color: rgba(229, 195, 132, 0.3);
+        }
+
+        .history-img {
+            width: 70px;
+            height: 70px;
+            object-fit: cover;
+            border-radius: 8px;
+            border: 1px solid var(--color-border);
+        }
+
+        .history-details {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex: 1;
+        }
+
+        .history-code {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--color-gold);
+        }
+
+        .history-desc {
+            font-size: 11px;
+            color: var(--color-text-secondary);
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .delete-btn {
+            background: rgba(255, 23, 68, 0.1);
+            border: 1px solid rgba(255, 23, 68, 0.3);
+            color: #FF1744;
+            border-radius: 8px;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .delete-btn:hover {
+            background: #FF1744;
+            color: white;
+        }
+
+        /* Notificaciones Toast */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--color-green);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+            display: none;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+            z-index: 10000;
+            animation: slideUp 0.3s ease forwards;
+        }
+
+        .toast.error {
+            background: var(--color-red);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Overlay de Login -->
+    <div id="loginOverlay" class="login-overlay">
+        <div class="login-card">
+            <div class="login-title">Administración Eyemax</div>
+            <p style="font-size:12px; color:var(--color-text-secondary)">Ingresa el PIN de 4 dígitos</p>
+            <input type="password" id="pinInput" class="login-input" maxlength="4" placeholder="••••">
+            <button id="loginBtn" class="login-btn">Entrar</button>
+        </div>
+    </div>
+
+    <!-- Contenedor Principal -->
+    <div id="adminContainer" class="admin-container">
+        <header>
+            <div class="brand">
+                <svg viewBox="0 0 24 24">
+                    <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                </svg>
+                <h1>EYEMAX ADMIN</h1>
+            </div>
+            <button id="logoutBtn" class="logout-btn">Salir</button>
+        </header>
+
+        <!-- Tabs de Navegación -->
+        <div class="tabs">
+            <button class="tab active" id="tabFilesBtn">Actualizar Archivos</button>
+            <button class="tab" id="tabConfigBtn">Segmentación PDF</button>
+            <button class="tab" id="tabHistoryBtn">Historial Algoritmo</button>
+        </div>
+
+        <!-- Tab 1: Carga de Archivos -->
+        <div id="tabFiles" class="tab-content active">
+            <div class="section-card">
+                <span class="section-title">Actualizar Inventario y Catálogos en Caliente</span>
+                <p style="font-size:12px; color:var(--color-text-secondary)">Sube los archivos actualizados. El servidor los procesará y reemplazará automáticamente sin interrumpir a los vendedores.</p>
+                
+                <div class="dropzone-container">
+                    <!-- Excel Inventario -->
+                    <div class="dropzone" id="dzExcel">
+                        <span class="dropzone-icon">📊</span>
+                        <span class="dropzone-title">Inventario Microsip</span>
+                        <span class="dropzone-desc">Suelte MICROSIP.xlsx aquí o haga clic</span>
+                        <div class="progress-bar-container"><div class="progress-bar"></div></div>
+                        <input type="file" id="fileExcel" accept=".xlsx" style="display:none">
+                    </div>
+                    
+                    <!-- Catálogo 1 -->
+                    <div class="dropzone" id="dzPdf1">
+                        <span class="dropzone-icon">📕</span>
+                        <span class="dropzone-title">Catálogo 1.pdf</span>
+                        <span class="dropzone-desc">Suelte el PDF de aretes/anillos</span>
+                        <div class="progress-bar-container"><div class="progress-bar"></div></div>
+                        <input type="file" id="filePdf1" accept=".pdf" style="display:none">
+                    </div>
+
+                    <!-- Catálogo 2 -->
+                    <div class="dropzone" id="dzPdf2">
+                        <span class="dropzone-icon">📘</span>
+                        <span class="dropzone-title">Catálogo 2.pdf</span>
+                        <span class="dropzone-desc">Suelte el PDF de collares/grabado</span>
+                        <div class="progress-bar-container"><div class="progress-bar"></div></div>
+                        <input type="file" id="filePdf2" accept=".pdf" style="display:none">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 2: Segmentación por Páginas -->
+        <div id="tabConfig" class="tab-content">
+            <div class="section-card">
+                <span class="section-title">Editar Rangos de Páginas de Catálogo</span>
+                <p style="font-size:12px; color:var(--color-text-secondary)">Define las páginas en las que se ubican los productos por categoría en cada PDF para acelerar el escaneo. Escribe "none" si la categoría no pertenece a ese PDF.</p>
+                
+                <div class="config-grid" id="configGrid">
+                    <!-- Dinámico por JS -->
+                </div>
+                
+                <button id="saveConfigBtn" class="save-btn">Guardar Cambios de Rangos</button>
+            </div>
+        </div>
+
+        <!-- Tab 3: Historial de Entrenamiento (Feedback Loop) -->
+        <div id="tabHistory" class="tab-content">
+            <div class="section-card">
+                <span class="section-title">Fotos de Entrenamiento Confirmadas por el Usuario</span>
+                <p style="font-size:12px; color:var(--color-text-secondary)">Estas imágenes representan la memoria visual del algoritmo. Elimina fotos erróneas para corregir la precisión de detección de Gemini.</p>
+                
+                <div class="history-list" id="historyList">
+                    <!-- Dinámico por JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notificación Toast -->
+    <div id="toast" class="toast"></div>
+
+    <script>
+        const API_URL = "";
+        let adminToken = localStorage.getItem("admin_token") || "";
+
+        // Elementos DOM
+        const loginOverlay = document.getElementById("loginOverlay");
+        const pinInput = document.getElementById("pinInput");
+        const loginBtn = document.getElementById("loginBtn");
+        const adminContainer = document.getElementById("adminContainer");
+        const logoutBtn = document.getElementById("logoutBtn");
+        const toast = document.getElementById("toast");
+
+        // Tabs
+        const tabFilesBtn = document.getElementById("tabFilesBtn");
+        const tabConfigBtn = document.getElementById("tabConfigBtn");
+        const tabHistoryBtn = document.getElementById("tabHistoryBtn");
+        const tabFiles = document.getElementById("tabFiles");
+        const tabConfig = document.getElementById("tabConfig");
+        const tabHistory = document.getElementById("tabHistory");
+
+        // Dropzones e Inputs
+        const dzExcel = document.getElementById("dzExcel");
+        const fileExcel = document.getElementById("fileExcel");
+        const dzPdf1 = document.getElementById("dzPdf1");
+        const filePdf1 = document.getElementById("filePdf1");
+        const dzPdf2 = document.getElementById("dzPdf2");
+        const filePdf2 = document.getElementById("filePdf2");
+
+        const configGrid = document.getElementById("configGrid");
+        const saveConfigBtn = document.getElementById("saveConfigBtn");
+        const historyList = document.getElementById("historyList");
+
+        // Mostrar notificaciones Toast
+        function showToast(message, isError = false) {
+            toast.textContent = message;
+            toast.className = "toast" + (isError ? " error" : "");
+            toast.style.display = "block";
+            setTimeout(() => {
+                toast.style.display = "none";
+            }, 4000);
+        }
+
+        // Gestión de Login / Sesión
+        async function checkSession() {
+            if (adminToken) {
+                // Configurar cookie admin_token
+                document.cookie = `admin_token=${adminToken}; path=/; max-age=86400`;
+                loginOverlay.style.display = "none";
+                adminContainer.style.display = "flex";
+                loadAllAdminData();
+            } else {
+                loginOverlay.style.display = "flex";
+                adminContainer.style.display = "none";
+            }
+        }
+
+        async function attemptLogin() {
+            const pin = pinInput.value.trim();
+            if (!pin) {
+                showToast("Por favor ingresa tu PIN", true);
+                return;
+            }
+            try {
+                const response = await fetch(`${API_URL}/api/admin/login`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ pin: pin })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    adminToken = data.token;
+                    localStorage.setItem("admin_token", adminToken);
+                    showToast("Sesión iniciada con éxito", false);
+                    checkSession();
+                } else {
+                    const err = await response.json();
+                    showToast(err.error || "PIN incorrecto", true);
+                }
+            } catch (error) {
+                showToast("Error al conectar con el servidor", true);
+            }
+        }
+
+        loginBtn.addEventListener("click", attemptLogin);
+        pinInput.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") attemptLogin();
+        });
+
+        logoutBtn.addEventListener("click", () => {
+            adminToken = "";
+            localStorage.removeItem("admin_token");
+            document.cookie = "admin_token=; path=/; max-age=0";
+            pinInput.value = "";
+            checkSession();
+        });
+
+        // Cambio de Pestañas
+        tabFilesBtn.addEventListener("click", () => setActiveTab(tabFilesBtn, tabFiles));
+        tabConfigBtn.addEventListener("click", () => {
+            setActiveTab(tabConfigBtn, tabConfig);
+            loadConfigJson();
+        });
+        tabHistoryBtn.addEventListener("click", () => {
+            setActiveTab(tabHistoryBtn, tabHistory);
+            loadTrainingHistory();
+        });
+
+        function setActiveTab(btn, contentSection) {
+            [tabFilesBtn, tabConfigBtn, tabHistoryBtn].forEach(b => b.classList.remove("active"));
+            [tabFiles, tabConfig, tabHistory].forEach(s => s.classList.remove("active"));
+            btn.classList.add("active");
+            contentSection.classList.add("active");
+        }
+
+        // Cargar todos los datos al entrar
+        function loadAllAdminData() {
+            loadConfigJson();
+            loadTrainingHistory();
+        }
+
+        // --- Tab 1: Carga de Archivos (Drag & Drop) ---
+        function setupDropzone(dz, input, uploadUrl, extraFieldsFunc = null) {
+            dz.addEventListener("click", () => input.click());
+
+            dz.addEventListener("dragover", (e) => {
+                e.preventDefault();
+                dz.classList.add("dragover");
+            });
+
+            dz.addEventListener("dragleave", () => {
+                dz.classList.remove("dragover");
+            });
+
+            dz.addEventListener("drop", (e) => {
+                e.preventDefault();
+                dz.classList.remove("dragover");
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    uploadFile(files[0], dz, uploadUrl, extraFieldsFunc);
+                }
+            });
+
+            input.addEventListener("change", (e) => {
+                const files = e.target.files;
+                if (files.length > 0) {
+                    uploadFile(files[0], dz, uploadUrl, extraFieldsFunc);
+                }
+            });
+        }
+
+        async function uploadFile(file, dz, url, extraFieldsFunc) {
+            const progressContainer = dz.querySelector(".progress-bar-container");
+            const progressBar = dz.querySelector(".progress-bar");
+            progressContainer.style.display = "block";
+            progressBar.style.width = "0%";
+
+            const formData = new FormData();
+            formData.append("file", file);
+            if (extraFieldsFunc) {
+                const fields = extraFieldsFunc();
+                for (const k in fields) {
+                    formData.append(k, fields[k]);
+                }
+            }
+
+            try {
+                const xhr = new XMLHttpRequest();
+                xhr.open("POST", url, true);
+                xhr.setRequestHeader("Authorization", adminToken);
+
+                xhr.upload.onprogress = function(e) {
+                    if (e.lengthComputable) {
+                        const percent = (e.loaded / e.total) * 100;
+                        progressBar.style.width = percent + "%";
+                    }
+                };
+
+                xhr.onload = function() {
+                    progressContainer.style.display = "none";
+                    if (xhr.status === 200) {
+                        const res = JSON.parse(xhr.responseText);
+                        showToast(`Archivo '${file.name}' subido con éxito`, false);
+                    } else {
+                        const err = JSON.parse(xhr.responseText);
+                        showToast(err.error || "Error al subir archivo", true);
+                    }
+                };
+
+                xhr.onerror = function() {
+                    progressContainer.style.display = "none";
+                    showToast("Error de conexión al subir el archivo", true);
+                };
+
+                xhr.send(formData);
+            } catch (error) {
+                progressContainer.style.display = "none";
+                showToast("Error en la solicitud de subida", true);
+            }
+        }
+
+        setupDropzone(dzExcel, fileExcel, `${API_URL}/api/admin/upload_inventory`);
+        setupDropzone(dzPdf1, filePdf1, `${API_URL}/api/admin/upload_catalog`, () => ({ catalog_name: "CATALOGO 1.pdf" }));
+        setupDropzone(dzPdf2, filePdf2, `${API_URL}/api/admin/upload_catalog`, () => ({ catalog_name: "CATALOGO 2.pdf" }));
+
+        // --- Tab 2: Configuración de Rangos PDF ---
+        async function loadConfigJson() {
+            try {
+                const response = await fetch(`${API_URL}/api/admin/config`, {
+                    headers: { "Authorization": adminToken }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    renderConfigGrid(data);
+                } else if (response.status === 401) {
+                    showToast("Sesión expirada", true);
+                    logoutBtn.click();
+                }
+            } catch (error) {
+                showToast("Error al cargar configuración de páginas", true);
+            }
+        }
+
+        function renderConfigGrid(data) {
+            configGrid.innerHTML = "";
+            for (const category in data) {
+                const ranges = data[category];
+                
+                const card = document.createElement("div");
+                card.className = "config-row";
+                card.innerHTML = `
+                    <span class="config-category-name">${category}</span>
+                    <div class="config-inputs-row">
+                        <div class="config-input-wrapper">
+                            <span class="config-input-label">Catálogo 1</span>
+                            <input type="text" class="config-input" data-cat="${category}" data-pdf="catalogo1" value="${ranges.catalogo1 || 'none'}">
+                        </div>
+                        <div class="config-input-wrapper">
+                            <span class="config-input-label">Catálogo 2</span>
+                            <input type="text" class="config-input" data-cat="${category}" data-pdf="catalogo2" value="${ranges.catalogo2 || 'none'}">
+                        </div>
+                    </div>
+                `;
+                configGrid.appendChild(card);
+            }
+        }
+
+        saveConfigBtn.addEventListener("click", async () => {
+            const inputs = configGrid.querySelectorAll(".config-input");
+            const newConfig = {};
+
+            inputs.forEach(input => {
+                const cat = input.getAttribute("data-cat");
+                const pdf = input.getAttribute("data-pdf");
+                const val = input.value.trim();
+
+                if (!newConfig[cat]) newConfig[cat] = {};
+                newConfig[cat][pdf] = val;
+            });
+
+            try {
+                const response = await fetch(`${API_URL}/api/admin/config`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": adminToken
+                    },
+                    body: JSON.stringify(newConfig)
+                });
+
+                if (response.ok) {
+                    showToast("Configuración de páginas guardada con éxito", false);
+                } else {
+                    const err = await response.json();
+                    showToast(err.error || "Error al guardar", true);
+                }
+            } catch (error) {
+                showToast("Error de conexión al guardar", true);
+            }
+        });
+
+        // --- Tab 3: Historial de Entrenamiento ---
+        async function loadTrainingHistory() {
+            try {
+                const response = await fetch(`${API_URL}/api/admin/history`, {
+                    headers: { "Authorization": adminToken }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    renderHistoryList(data);
+                }
+            } catch (error) {
+                showToast("Error al cargar historial de entrenamiento", true);
+            }
+        }
+
+        function renderHistoryList(data) {
+            historyList.innerHTML = "";
+            if (data.length === 0) {
+                historyList.innerHTML = `<p style="color:var(--color-text-secondary); font-size:12px; grid-column:1/-1; text-align:center; padding: 20px;">No hay registros de entrenamiento confirmados.</p>`;
+                return;
+            }
+
+            // Invertir para mostrar los últimos guardados primero
+            data.reverse().forEach(item => {
+                const card = document.createElement("div");
+                card.className = "history-item";
+                
+                // Limpiar ruta para src
+                const imgPathClean = item.image_path.startsWith("assets/") ? item.image_path.substring(7) : item.image_path;
+                
+                card.innerHTML = `
+                    <img class="history-img" src="/${imgPathClean}" onerror="this.src='placeholder.jpg'" alt="Joyeria">
+                    <div class="history-details">
+                        <span class="history-code">${item.codigo}</span>
+                        <span class="history-desc">${item.descripcion_visual || 'Joyeria'}</span>
+                    </div>
+                    <button class="delete-btn" data-hash="${item.image_hash}">✕</button>
+                `;
+                
+                const deleteBtn = card.querySelector(".delete-btn");
+                deleteBtn.addEventListener("click", async () => {
+                    if (confirm(`¿Estás seguro de que deseas eliminar esta imagen y desvincularla del código ${item.codigo}?`)) {
+                        deleteHistoryItem(item.image_hash, card);
+                    }
+                });
+                
+                historyList.appendChild(card);
+            });
+        }
+
+        async function deleteHistoryItem(hash, cardElement) {
+            try {
+                const response = await fetch(`${API_URL}/api/admin/history/${hash}`, {
+                    method: "DELETE",
+                    headers: { "Authorization": adminToken }
+                });
+
+                if (response.ok) {
+                    showToast("Registro eliminado con éxito", false);
+                    cardElement.remove();
+                    // Si se vació, pintar el texto vacío
+                    if (historyList.children.length === 0) {
+                        historyList.innerHTML = `<p style="color:var(--color-text-secondary); font-size:12px; grid-column:1/-1; text-align:center; padding: 20px;">No hay registros de entrenamiento confirmados.</p>`;
+                    }
+                } else {
+                    const err = await response.json();
+                    showToast(err.error || "Error al eliminar", true);
+                }
+            } catch (error) {
+                showToast("Error de conexión al intentar eliminar", true);
+            }
+        }
+
+        // Ejecutar verificación de sesión inicial
+        checkSession();
+    </script>
+</body>
+</html>

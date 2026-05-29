@@ -1,0 +1,22 @@
+{
+  "name": "Eyemax",
+  "short_name": "Eyemax",
+  "description": "Scanner de Joyería Eyemax",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050508",
+  "theme_color": "#E5C384",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "ARETE": {
+    "catalogo1": "1-112",
+    "catalogo2": "none"
+  },
+  "PIERCING": {
+    "catalogo1": "113-167",
+    "catalogo2": "none"
+  },
+  "EARCUFF": {
+    "catalogo1": "113-167",
+    "catalogo2": "none"
+  },
+  "ANILLO": {
+    "catalogo1": "168-227",
+    "catalogo2": "none"
+  },
+  "PULSERA": {
+    "catalogo1": "228-324",
+    "catalogo2": "1-121"
+  },
+  "COLLAR": {
+    "catalogo1": "none",
+    "catalogo2": "122-356"
+  },
+  "GRABABLE": {
+    "catalogo1": "none",
+    "catalogo2": "1-121"
+  },
+  "PERSONALIZADO": {
+    "catalogo1": "none",
+    "catalogo2": "1-121"
+  },
+  "LLAVERO": {
+    "catalogo1": "none",
+    "catalogo2": "1-121"
+  }
+}
