@@ -15,3 +15,6 @@ assets/cache_recortes/
 
 # Directorio de scripts temporales
 scratch/
+
+# Recortes del catálogo para RAG
+assets/catalog_crops/

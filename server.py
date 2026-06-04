@@ -135,6 +135,23 @@ def migrate_training_history():
     except Exception as e:
         print(f"Error durante la migración del historial: {e}")
 
+CATALOG_VECTORS_DATA = []
+
+def load_catalog_vectors():
+    global CATALOG_VECTORS_DATA
+    path = 'catalogo_vectores.json'
+    if os.path.exists(path):
+        try:
+            print("Cargando base de datos de vectores del catálogo para RAG...")
+            with open(path, 'r', encoding='utf-8') as f:
+                CATALOG_VECTORS_DATA = json.load(f)
+            print(f"Base de datos de vectores del catálogo cargada con {len(CATALOG_VECTORS_DATA)} registros.")
+        except Exception as e:
+            print(f"Error al cargar base de datos de vectores: {e}")
+    else:
+        print("Aviso: 'catalogo_vectores.json' no encontrado. La búsqueda semántica en catálogo estará inactiva.")
+
+
 def get_queries_count():
     """Lee el archivo registro_consultas.json y retorna el número de consultas hechas hoy."""
     file_path = 'registro_consultas.json'
@@ -732,13 +749,15 @@ def recognize_product():
 
     # Stage 2: Búsqueda por similitud de vectores locales (ONNX Runtime)
     scanned_vector = extract_image_vector(image_bytes)
+
     best_similarity = -1.0
     best_match_item = None
     
-    # Lista de candidatos prioritarios para Gemini (similitud entre 75% y 92%)
-    vector_candidates = []
+    # Lista de candidatos del catálogo completo por búsqueda vectorial semántica (RAG)
+    catalog_candidates = []
     
     if scanned_vector:
+        # Primero buscamos en el historial de entrenamiento para coincidencia exacta
         history_file = 'historial_entrenamiento.json'
         if os.path.exists(history_file):
             try:
@@ -762,17 +781,34 @@ def recognize_product():
                     if sim > best_similarity:
                         best_similarity = sim
                         best_match_item = item
-                    
-                    # Si tiene similitud considerable, considerarlo candidato prioritario
-                    if 0.75 <= sim < 0.92:
-                        vector_candidates.append((code, sim))
             except Exception as e:
                 print(f"Error al buscar similitud de vectores en historial: {e}")
                 
-        # Ordenar candidatos por mayor similitud
-        vector_candidates.sort(key=lambda x: x[1], reverse=True)
-        # Quedarse con los 3 mejores
-        vector_candidates = vector_candidates[:3]
+        # Si no hay coincidencia exacta local en el historial (similitud >= 92%),
+        # buscamos los 3 mejores candidatos en todo el catálogo (RAG)
+        if (best_similarity < 0.92) and CATALOG_VECTORS_DATA:
+            try:
+                cat_scores = {}
+                for item in CATALOG_VECTORS_DATA:
+                    item_vector = item.get('vector_embeddings')
+                    code = item.get('codigo')
+                    if item_vector and code:
+                        sim = cosine_similarity(scanned_vector, item_vector)
+                        if code not in cat_scores or sim > cat_scores[code]['sim']:
+                            cat_scores[code] = {'sim': sim, 'item': item}
+                            
+                # Ordenar por similitud
+                sorted_cat_scores = sorted(cat_scores.items(), key=lambda x: x[1]['sim'], reverse=True)
+                # Tomar los 3 mejores candidatos
+                for code, score_data in sorted_cat_scores[:3]:
+                    catalog_candidates.append({
+                        'codigo': code,
+                        'sim': score_data['sim'],
+                        'item': score_data['item']
+                    })
+                    print(f"[RAG CANDIDATE] Candidato del catálogo: {code} (Sim: {score_data['sim']:.4f})")
+            except Exception as e:
+                print(f"Error en la búsqueda semántica del catálogo: {e}")
 
     if best_similarity >= 0.92 and best_match_item:
         match_code = best_match_item.get('codigo')
@@ -821,23 +857,63 @@ def recognize_product():
         return jsonify({"error": "La API de Gemini no está configurada en el servidor."}), 500
 
     try:
+        # Cargar imágenes físicas de los candidatos de catálogo para RAG
+        rag_contents = []
+        rag_candidates_desc = []
+        
+        for i, cand in enumerate(catalog_candidates):
+            code = cand['codigo']
+            item_data = cand['item']
+            crop_path = item_data.get('crop_path')
+            
+            # Cargar información de Microsip
+            prod_info = get_product_by_code(code)
+            desc_text = prod_info.get('DESCRIPCION', 'Sin descripción') if prod_info else 'Sin descripción'
+            rag_candidates_desc.append(f"Candidato {i+1}: Código '{code}' - Descripción: {desc_text}")
+            
+            if crop_path and os.path.exists(crop_path):
+                try:
+                    with open(crop_path, 'rb') as f:
+                        crop_bytes = f.read()
+                    
+                    mime = 'image/jpeg'
+                    if crop_path.lower().endswith('.png'):
+                        mime = 'image/png'
+                    elif crop_path.lower().endswith('.gif'):
+                        mime = 'image/gif'
+                    elif crop_path.lower().endswith('.webp'):
+                        mime = 'image/webp'
+                        
+                    rag_contents.append({
+                        'mime_type': mime,
+                        'data': crop_bytes
+                    })
+                    rag_contents.append(f"Candidato {i+1} del catálogo: Código '{code}'")
+                except Exception as read_err:
+                    print(f"Error al cargar imagen del candidato {code}: {read_err}")
+
         # 1. Cargar configuración de segmentación de páginas
         page_config = load_page_config()
         page_config_text = json.dumps(page_config, indent=2)
 
-        print(f"Procesando imagen '{file.filename}' buscando en los catálogos PDF registrados...")
+        print(f"Procesando imagen '{file.filename}'...")
         
         contents = []
         
-        # Añadir referencias globales de los catálogos PDF ya subidos en Gemini Files API
-        if catalog_file_names:
-            print(f"Incluyendo {len(catalog_file_names)} catálogos PDF en la solicitud de Gemini...")
-            contents.extend(catalog_file_names)
+        # En lugar de enviar los PDF completos, activamos Multimodal RAG
+        # Si tenemos candidatos de catálogo, enviamos solo sus imágenes recortadas para ahorrar tokens
+        if rag_contents:
+            print(f"[RAG PIPELINE] Enviando únicamente {len(catalog_candidates)} recortes de catálogo a Gemini.")
+            contents.extend(rag_contents)
+            candidates_prompt_text = "\n".join(rag_candidates_desc)
         else:
-            print("ADVERTENCIA: No hay catálogos PDF globales inicializados en la memoria.")
+            # Fallback en caso de que no haya base de datos de vectores
+            print("[RAG FALLBACK] No se encontraron candidatos de RAG. Usando PDFs de catálogo completos.")
+            if catalog_file_names:
+                contents.extend(catalog_file_names)
+            candidates_prompt_text = "No se encontraron candidatos vectoriales."
 
         # 2. Cargar ejemplos Few-Shot diversificados desde el historial de entrenamiento para el Feedback Loop
-        # Cargamos los últimos 10 ejemplos diversificados generales para que Gemini los use como memoria visual
         training_examples = load_diversified_training_examples(limit=10)
         history_rules = []
         if training_examples:
@@ -881,21 +957,23 @@ def recognize_product():
         })
         
         contents.append(
-            "Debes buscar visualmente el artículo de la imagen escaneada dentro de los catálogos PDF provistos.\n"
+            "La primera imagen (o la última provista) corresponde a la foto de la pieza real escaneada por el usuario.\n"
+            "Las demás imágenes (si se proveen) corresponden a recortes individuales del catálogo oficial para las opciones sugeridas.\n"
+            "Debes comparar minuciosamente la foto escaneada con las opciones provistas y decidir cuál es la correcta.\n"
             "Debes responder estrictamente en formato JSON con la siguiente estructura:\n"
-            "- Si la confianza/similitud calculada entre la imagen escaneada y una pieza del catálogo es IGUAL O MAYOR al 90%:\n"
+            "- Si estás seguro de la coincidencia exacta (confianza >= 90%):\n"
             "  {\n"
             "    \"estatus\": \"EXITOSO\",\n"
             "    \"codigo_exacto\": \"CODIGO_EXACTO\",\n"
             "    \"opciones_sugeridas\": []\n"
             "  }\n"
-            "- Si la confianza/similitud calculada es MENOR al 90%:\n"
+            "- Si no estás seguro o tienes dudas entre las opciones:\n"
             "  {\n"
             "    \"estatus\": \"DUDA\",\n"
             "    \"codigo_exacto\": \"\",\n"
             "    \"opciones_sugeridas\": [\"CODIGO1\", \"CODIGO2\", \"CODIGO3\"]\n"
             "  }\n"
-            "Asegúrate de que los códigos de producto devueltos estén escritos exactamente como aparecen impresos al lado de las piezas en el catálogo PDF."
+            "Asegúrate de que los códigos de producto devueltos existan en el catálogo y estén escritos exactamente igual."
         )
         
         # 4. Configurar instrucciones del sistema y segmentación por categoría
@@ -909,15 +987,24 @@ def recognize_product():
             "Restringe tu comparación visual y extracción de códigos estrictamente a esos rangos de páginas para el catálogo respectivo. Si para un catálogo indica 'none', no busques en él."
         )
 
-        # Candidatos sugeridos por el modelo de similitud local
-        candidates_instruction = ""
-        if vector_candidates:
-            candidates_lines = [f"- Código '{code}' (Similitud visual por embedding: {sim*100:.1f}%)" for code, sim in vector_candidates]
-            candidates_instruction = (
-                "CANDIDATOS POTENCIALES POR SIMILITUD DE EMBEDDINGS LOCAL:\n"
-                "Nuestro modelo de similitud visual local sugiere altamente que la pieza escaneada podría ser una de las siguientes:\n"
-                + "\n".join(candidates_lines) + "\n"
-                "Por favor, revisa visualmente con prioridad estas opciones en el catálogo para ver si coinciden con la pieza escaneada.\n\n"
+        # Instrucciones de RAG para Gemini
+        if rag_contents:
+            rag_instruction = (
+                "BÚSQUEDA VECTORIAL SEMÁNTICA (Múltiples opciones sugeridas):\n"
+                "Para ayudarte a decidir, nuestro sistema local ha pre-seleccionado las 3 imágenes del catálogo más parecidas visualmente:\n"
+                f"{candidates_prompt_text}\n\n"
+                "Instrucciones:\n"
+                "1. Compara minuciosamente los detalles, cierres, texturas y formas de la imagen real escaneada con las imágenes de los candidatos provistos.\n"
+                "2. Si la foto escaneada coincide visualmente con uno de los candidatos con alta confianza (90% o más), selecciona ese código y colócalo en 'codigo_exacto'.\n"
+                "3. Si crees que coincide pero tienes alguna duda, pon el estatus en 'DUDA' y coloca las claves en 'opciones_sugeridas' en orden de relevancia.\n"
+                "4. Presta especial atención al material y color del metal. Si la foto escaneada es de color plata, debe coincidir con el código plateado."
+            )
+        else:
+            rag_instruction = (
+                "BÚSQUEDA GLOBAL EN CATÁLOGOS PDF:\n"
+                "Compara de manera minuciosa la foto de joyería escaneada con las imágenes y las páginas de los dos catálogos PDF provistos.\n"
+                "Encuentra la pieza en el catálogo que tenga exactamente la misma forma, color de metal, dijes y características visuales.\n"
+                "Extrae el código o Clave escrito en el PDF junto a esa pieza encontrada (ej. AX1362, COL294, etc.)."
             )
 
         print("Consultando a Gemini 3.5 Flash...")
@@ -925,25 +1012,23 @@ def recognize_product():
             model_name='gemini-3.5-flash',
             generation_config={"response_mime_type": "application/json"},
             system_instruction=(
-                "Eres un asistente experto en reconocimiento visual de joyería para Eyemax.\n"
-                "Compara de manera minuciosa la foto de joyería escaneada con las imágenes y las páginas de los dos catálogos PDF provistos.\n"
-                "Encuentra la pieza en el catálogo que tenga exactamente la misma forma, color de metal, dijes y características visuales.\n"
-                "Extrae el código o Clave escrito en el PDF junto a esa pieza encontrada (ej. AX1362, COL294, etc.).\n\n"
+                "Eres un asistente experto en reconocimiento visual de joyería para Eyemax.\n\n"
+                f"{rag_instruction}\n\n"
                 f"{segmentation_instruction}\n\n"
-                f"{candidates_instruction}"
                 "MEMORIA DE ENTRENAMIENTO PREVIO (Fotos confirmadas por el usuario):\n"
                 "El equipo ha confirmado anteriormente que ciertas imágenes reales corresponden a los siguientes códigos. "
                 "Utiliza esta memoria para dar prioridad absoluta a estos códigos si la foto escaneada se asemeja visualmente al ejemplo provisto:\n"
                 f"{history_rules_text}\n\n"
                 "Reglas estrictas:\n"
                 "1. Presta extrema atención al color del metal de la foto. Si es plateada, la clave debe corresponder a la pieza plateada en el PDF. Si es dorada, debe ser la dorada. Respeta siempre las letras o sufijos finales del código (como G para dorado y P para plata).\n"
-                "2. Está prohibido inventar códigos. Los códigos que devuelvas deben ser legibles y existir en las páginas de los PDF provistos.\n"
+                "2. Está prohibido inventar códigos. Los códigos que devuelvas deben ser legibles y existir en las páginas de los PDF provistos o entre las opciones sugeridas.\n"
                 "3. Si tu nivel de confianza visual en la coincidencia exacta es igual o superior al 90%, establece 'estatus': 'EXITOSO' y pon el código en 'codigo_exacto'.\n"
                 "4. Si la imagen es borrosa, tiene reflejos, o no estás 90% seguro de cuál de varias piezas similares es, establece 'estatus': 'DUDA', deja 'codigo_exacto' vacío y pon en 'opciones_sugeridas' los 3 códigos del catálogo que visualmente más se parezcan a la pieza escaneada."
             )
         )
         
         response = model.generate_content(contents)
+
         increment_query_count()
         raw_text = response.text.strip()
         print(f"Respuesta cruda de Gemini: {raw_text}")
@@ -1330,8 +1415,10 @@ initialize_gemini_catalogs()
 try:
     initialize_onnx_model()
     migrate_training_history()
+    load_catalog_vectors()
 except Exception as e:
     print(f"Advertencia al inicializar ONNX o migrar historial: {e}")
+
 
 
 if __name__ == '__main__':
