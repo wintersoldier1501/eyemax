@@ -18,7 +18,7 @@ async def main(page: ft.Page):
     page.window_height = 800
     page.window_resizable = False
     page.padding = 0
-    page.bgcolor = "#0F0F1A"
+    page.bgcolor = "#0F0F10"
 
     # Función para abrir selector de archivos nativo usando Tkinter
     def select_file_native():
@@ -148,15 +148,15 @@ async def main(page: ft.Page):
         except Exception as ex:
             show_toast(f"Error al leer archivo: {str(ex)}", is_error=True)
     
-    # Paleta de colores Premium
-    COLOR_BG_GRADIENT_START = "#14142B"
-    COLOR_BG_GRADIENT_END = "#0B0B14"
+    # Paleta de colores Premium (Slate Gray #646267)
+    COLOR_BG_GRADIENT_START = "#1B1B1D"
+    COLOR_BG_GRADIENT_END = "#0C0C0E"
     COLOR_GOLD = "#D4AF37"
     COLOR_GOLD_LIGHT = "#F3E5AB"
-    COLOR_DARK_CARD = "#1D1D35"
-    COLOR_BORDER = "#2E2E54"
+    COLOR_DARK_CARD = "#232325"
+    COLOR_BORDER = "#646267"
     COLOR_TEXT_PRIMARY = "#FFFFFF"
-    COLOR_TEXT_SECONDARY = "#A0A0C0"
+    COLOR_TEXT_SECONDARY = "#9C9CA0"
     COLOR_GREEN = "#00E676"
     COLOR_RED = "#FF1744"
 
@@ -271,7 +271,7 @@ async def main(page: ft.Page):
     res_material = ft.Text("-", size=11, color=COLOR_TEXT_SECONDARY, weight=ft.FontWeight.BOLD)
     res_badge = ft.Container(
         content=res_material,
-        bgcolor="#25254B",
+        bgcolor="#2C2C2E",
         border_radius=8,
         padding=ft.Padding.symmetric(horizontal=10, vertical=4),
         border=ft.Border.all(1, COLOR_BORDER)
@@ -306,7 +306,7 @@ async def main(page: ft.Page):
             horizontal_alignment=ft.CrossAxisAlignment.CENTER
         ),
         width=330,
-        bgcolor="#1C1C3A",
+        bgcolor="#252528",
         border_radius=20,
         padding=20,
         border=ft.Border.all(1.5, COLOR_GOLD),

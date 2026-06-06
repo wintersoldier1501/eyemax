@@ -21,8 +21,8 @@
             --color-bg-gradient-end: #050508;
             --color-gold: #E5C384; /* Soft premium gold */
             --color-gold-light: #F5E6C4;
-            --color-dark-card: #12121E; /* Deep dark grayish-blue */
-            --color-border: #1E1E2F; /* Subtle border */
+            --color-dark-card: #1B1B1E; /* Deep dark charcoal-gray */
+            --color-border: #646267; /* Slate gray border */
             --color-text-primary: #FFFFFF;
             --color-text-secondary: #8E8E9F;
             --color-green: #00E676;
@@ -126,7 +126,7 @@
         .nav-tabs {
             width: 100%;
             display: flex;
-            background: rgba(29, 29, 53, 0.45);
+            background: rgba(100, 98, 103, 0.2);
             border: 1px solid var(--color-border);
             border-radius: 16px;
             padding: 4px;
@@ -729,7 +729,7 @@
             top: 74px;
             left: 16px;
             width: calc(100% - 32px);
-            background: #12121E;
+            background: #1B1B1E;
             border: 1px solid var(--color-border);
             border-radius: 12px;
             max-height: 240px;
@@ -964,7 +964,7 @@
                     </div>
                     
                     <!-- Sección de rescate manual discreta -->
-                    <div style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #1E1E2F;">
+                    <div style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #646267;">
                         <span style="font-size: 10px; font-weight: 700; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 8px;">¿No es ninguno de ellos?</span>
                         <div style="display: flex; gap: 8px; align-items: center;">
                             <input type="text" id="manualCodeInput" placeholder="Ingresar clave manual..." style="flex: 1; background: rgba(15, 15, 26, 0.6); border: 1px solid var(--color-border); border-radius: 10px; padding: 8px 12px; color: white; font-size: 13px; font-weight: 600; outline: none; transition: border-color 0.2s;" onfocus="this.style.borderColor='var(--color-gold)'" onblur="this.style.borderColor='var(--color-border)'">
