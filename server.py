@@ -1127,6 +1127,55 @@ def serve_sw():
 def admin_page():
     return render_template('admin.html')
 
+# --- Sistema de Indexación Automática en Segundo Plano (Auto-RAG) ---
+import threading
+
+debounce_timer = None
+indexing_lock = threading.Lock()
+is_indexing = False
+needs_reindex = False
+
+def run_indexer_background():
+    global is_indexing, needs_reindex
+    with indexing_lock:
+        if is_indexing:
+            print("[AUTO-INDEX] El indexador ya está corriendo. Programando re-indexación al finalizar.")
+            needs_reindex = True
+            return
+        is_indexing = True
+        
+    while True:
+        try:
+            print("[AUTO-INDEX] Iniciando regeneración del catálogo vectorial en segundo plano...")
+            import sys
+            import subprocess
+            python_exe = sys.executable
+            # Ejecutamos el script de regeneración limpia
+            result = subprocess.run([python_exe, "scratch/regenerate_catalog.py"], capture_output=True, text=True)
+            if result.returncode == 0:
+                print("[AUTO-INDEX] [ÉXITO] Base de datos de vectores regenerada y guardada.")
+                # Recargar vectores en caliente en la memoria del servidor
+                load_catalog_vectors()
+            else:
+                print(f"[AUTO-INDEX] [ERROR] Falló el indexador (código {result.returncode}): {result.stderr}")
+        except Exception as e:
+            print(f"[AUTO-INDEX] [ERROR] Error crítico al ejecutar indexador automático: {e}")
+            
+        with indexing_lock:
+            if not needs_reindex:
+                is_indexing = False
+                break
+            needs_reindex = False
+
+def trigger_auto_indexing():
+    global debounce_timer
+    if debounce_timer is not None:
+        debounce_timer.cancel()
+    debounce_timer = threading.Timer(10.0, run_indexer_background)
+    debounce_timer.start()
+    print("[AUTO-INDEX] Temporizador de indexación programado en 10 segundos (debounced).")
+
+
 @app.route('/api/admin/login', methods=['POST'])
 def admin_login():
     data = request.get_json() or {}
@@ -1156,6 +1205,8 @@ def admin_upload_inventory():
         file.save(EXCEL_PATH)
         # Intentar cargar en memoria para verificar validez
         load_inventory()
+        # Programar regeneración de vectores automática
+        trigger_auto_indexing()
         return jsonify({"success": True, "records": len(df_inventario)})
     except Exception as e:
         print(f"Error al cargar nuevo inventario: {e}")
@@ -1193,6 +1244,8 @@ def admin_upload_catalog():
             print(f"[ADMIN] Catálogo '{catalog_name}' actualizado. Volviendo a subir a Gemini...")
             initialize_gemini_catalogs()
             
+        # Programar regeneración de vectores automática
+        trigger_auto_indexing()
         return jsonify({"success": True})
     except Exception as e:
         print(f"Error al subir catálogo: {e}")
