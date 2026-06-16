@@ -1106,6 +1106,26 @@
         </div>
     </div>
 
+    <!-- Modal de Visualización de Catálogo en Pantalla Completa -->
+    <div id="catalogModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 3000; justify-content: center; align-items: center; flex-direction: column; padding: 20px; backdrop-filter: blur(10px);">
+        <button id="closeCatalogModalBtn" style="position: absolute; top: 20px; right: 20px; background: rgba(15,15,26,0.8); border: 1px solid var(--color-border); color: #fff; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: bold; cursor: pointer; z-index: 3010;">✕</button>
+        <div style="width: 100%; height: calc(100% - 60px); display: flex; justify-content: center; align-items: center; overflow: auto;">
+            <img id="catalogModalImg" src="" style="max-width: 100%; max-height: 100%; object-fit: contain; transition: transform 0.2s;" alt="Catálogo Ampliado">
+        </div>
+        <p style="color:var(--color-text-secondary); font-size:11px; margin-top:10px;">Arrastra o haz doble clic para restablecer</p>
+    </div>
+
+    <!-- Modal de Autorización PIN para Confirmar/Corregir -->
+    <div id="authPinModal" class="auth-overlay" style="display: none;">
+        <div class="auth-card">
+            <button id="closeAuthPinBtn" class="auth-close">✕</button>
+            <div class="auth-title">Autorización Requerida</div>
+            <p style="font-size: 11px; color: var(--color-text-secondary); margin-top: -10px;">Ingresa el PIN de Administrador para realizar esta acción:</p>
+            <input type="password" id="authPinInput" class="auth-input" maxlength="4" placeholder="••••">
+            <button id="authPinSubmitBtn" class="auth-btn">Validar PIN</button>
+        </div>
+    </div>
+
     <script>
         const API_URL = ""; // Relativa a nuestro host actual
         let currentImagePath = ""; // Guardar la ruta de la imagen actual para Feedback Loop
@@ -1857,24 +1877,5 @@
             });
         }
     </script>
-    <!-- Modal de Visualización de Catálogo en Pantalla Completa -->
-    <div id="catalogModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 3000; justify-content: center; align-items: center; flex-direction: column; padding: 20px; backdrop-filter: blur(10px);">
-        <button id="closeCatalogModalBtn" style="position: absolute; top: 20px; right: 20px; background: rgba(15,15,26,0.8); border: 1px solid var(--color-border); color: #fff; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: bold; cursor: pointer; z-index: 3010;">✕</button>
-        <div style="width: 100%; height: calc(100% - 60px); display: flex; justify-content: center; align-items: center; overflow: auto;">
-            <img id="catalogModalImg" src="" style="max-width: 100%; max-height: 100%; object-fit: contain; transition: transform 0.2s;" alt="Catálogo Ampliado">
-        </div>
-        <p style="color:var(--color-text-secondary); font-size:11px; margin-top:10px;">Arrastra o haz doble clic para restablecer</p>
-    </div>
-
-    <!-- Modal de Autorización PIN para Confirmar/Corregir -->
-    <div id="authPinModal" class="auth-overlay" style="display: none;">
-        <div class="auth-card">
-            <button id="closeAuthPinBtn" class="auth-close">✕</button>
-            <div class="auth-title">Autorización Requerida</div>
-            <p style="font-size: 11px; color: var(--color-text-secondary); margin-top: -10px;">Ingresa el PIN de Administrador para realizar esta acción:</p>
-            <input type="password" id="authPinInput" class="auth-input" maxlength="4" placeholder="••••">
-            <button id="authPinSubmitBtn" class="auth-btn">Validar PIN</button>
-        </div>
-    </div>
 </body>
 </html>
