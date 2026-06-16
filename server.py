@@ -18,15 +18,15 @@ import io
 
 # ONNX Local Embeddings Config
 ORT_SESSION = None
-MODEL_PATH = "scratch/mobilenetv2.onnx"
-MODEL_URL = "https://huggingface.co/onnxmodelzoo/mobilenetv2-12/resolve/main/mobilenetv2-12.onnx"
+MODEL_PATH = "scratch/clip_vision.onnx"
+MODEL_URL = "https://huggingface.co/Qdrant/clip-ViT-B-32-vision/resolve/main/model.onnx"
 
 def initialize_onnx_model():
     global ORT_SESSION
     if ORT_SESSION is not None:
         return
         
-    print("Verificando modelo local ONNX de MobileNetV2...")
+    print("Verificando modelo local ONNX de CLIP...")
     os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
     if not os.path.exists(MODEL_PATH):
         print(f"Descargando modelo ONNX desde {MODEL_URL}...")
@@ -47,7 +47,7 @@ def initialize_onnx_model():
 
 def extract_image_vector(image_bytes):
     """
-    Extrae un vector de 1000 dimensiones (logits) usando MobileNetV2 ONNX
+    Extrae un vector de 512 dimensiones usando el modelo CLIP ViT-B/32 ONNX
     a partir de los bytes de una imagen.
     """
     global ORT_SESSION
@@ -61,16 +61,16 @@ def extract_image_vector(image_bytes):
     try:
         img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
         
-        # Redimensionar a 224x224 (entrada de MobileNetV2)
+        # Redimensionar a 224x224 (entrada de CLIP)
         img_resized = img.resize((224, 224), Image.Resampling.BILINEAR)
         img_data = np.array(img_resized).astype(np.float32)
         
         # Transponer de HWC a CHW (3, 224, 224)
         img_data = img_data.transpose(2, 0, 1)
         
-        # Normalizar con la media y desviación estándar de ImageNet
-        mean = np.array([0.485, 0.456, 0.406]).reshape(3, 1, 1)
-        std = np.array([0.229, 0.224, 0.225]).reshape(3, 1, 1)
+        # Normalizar con la media y desviación estándar de CLIP
+        mean = np.array([0.48145466, 0.4578275, 0.40821073]).reshape(3, 1, 1)
+        std = np.array([0.26862954, 0.26130258, 0.27577711]).reshape(3, 1, 1)
         img_data = (img_data / 255.0 - mean) / std
         
         # Agregar dimensión de lote (1, 3, 224, 224)
@@ -112,10 +112,12 @@ def migrate_training_history():
             
         modified = False
         for item in history:
-            if 'vector_embeddings' not in item:
+            vector_exists = 'vector_embeddings' in item
+            is_wrong_dim = vector_exists and len(item['vector_embeddings']) != 512
+            if not vector_exists or is_wrong_dim:
                 image_path = item.get('image_path')
                 if image_path and os.path.exists(image_path):
-                    print(f"Migrando {image_path}...")
+                    print(f"Migrando {image_path} a embeddings CLIP...")
                     try:
                         with open(image_path, 'rb') as img_f:
                             img_bytes = img_f.read()
@@ -129,9 +131,9 @@ def migrate_training_history():
         if modified:
             with open(history_file, 'w', encoding='utf-8') as f:
                 json.dump(history, f, indent=2, ensure_ascii=False)
-            print("Migración de historial completada y guardada.")
+            print("Migración de historial a CLIP completada y guardada.")
         else:
-            print("Historial ya estaba completamente migrado o vacío.")
+            print("Historial ya estaba completamente migrado a CLIP o vacío.")
     except Exception as e:
         print(f"Error durante la migración del historial: {e}")
 
