@@ -919,7 +919,7 @@
                         </div>
                     </div>
 
-                    <hr class="card-divider">
+                    <hr class="card-divider" id="feedbackDivider">
                     
                     <!-- Feedback y Entrenador de Coincidencia Exacta -->
                     <div id="exactFeedbackSection" style="margin-top: 15px; display: flex; flex-direction: column; gap: 8px;">
@@ -1041,6 +1041,8 @@
         const exactCorrectionBox = document.getElementById("exactCorrectionBox");
         const exactManualInput = document.getElementById("exactManualInput");
         const exactManualSaveBtn = document.getElementById("exactManualSaveBtn");
+        const feedbackDivider = document.getElementById("feedbackDivider");
+        const exactFeedbackSection = document.getElementById("exactFeedbackSection");
         
         const resCode = document.getElementById("resCode");
         const resPiece = document.getElementById("resPiece");
@@ -1253,6 +1255,16 @@
                 
                 resMode.textContent = `ⓘ Reconocimiento: ${data.mode || 'GEMINI_REAL'}`;
                 showToast("Identificación completada con éxito", false);
+                
+                // Mostrar feedback solo si estamos en la pestaña de escanear
+                const isScanning = tabEscanear.classList.contains("active");
+                if (isScanning) {
+                    if (feedbackDivider) feedbackDivider.style.display = "block";
+                    if (exactFeedbackSection) exactFeedbackSection.style.display = "flex";
+                } else {
+                    if (feedbackDivider) feedbackDivider.style.display = "none";
+                    if (exactFeedbackSection) exactFeedbackSection.style.display = "none";
+                }
                 
                 // Mostrar página del catálogo si está disponible
                 if (data.catalog_page_url) {
