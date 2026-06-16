@@ -620,6 +620,61 @@ def load_diversified_training_examples(category_filter=None, limit=15):
         print(f"Error al leer ejemplos diversificados de {history_file}: {e}")
         return []
 
+def load_relevant_training_examples(query_vector, category_filter=None, limit=3, min_similarity=0.60):
+    """
+    Retorna los ejemplos del historial de entrenamiento visualmente más similares al query_vector,
+    filtrados opcionalmente por categoría, asegurando que sean de códigos únicos.
+    """
+    history_file = 'historial_entrenamiento.json'
+    if not os.path.exists(history_file) or not query_vector:
+        return []
+        
+    try:
+        with open(history_file, 'r', encoding='utf-8') as f:
+            history = json.load(f)
+            
+        scored_examples = []
+        for item in history:
+            code = item.get('codigo')
+            img_path = item.get('image_path')
+            vector = item.get('vector_embeddings')
+            
+            if code and img_path and vector and os.path.exists(img_path):
+                # Filtro por categoría opcional
+                if category_filter and category_filter != "UNKNOWN":
+                    prod = get_product_by_code(code)
+                    prod_cat = get_category_from_product(prod)
+                    if prod_cat != category_filter:
+                        continue
+                        
+                sim = cosine_similarity(query_vector, vector)
+                if sim >= min_similarity:
+                    scored_examples.append({
+                        'item': item,
+                        'similarity': sim,
+                        'codigo': code
+                    })
+                    
+        # Ordenar por similitud de mayor a menor
+        scored_examples.sort(key=lambda x: x['similarity'], reverse=True)
+        
+        # Filtrar duplicados de código, quedándose con el más similar
+        unique_examples = []
+        seen_codes = set()
+        for se in scored_examples:
+            code = se['codigo']
+            if code not in seen_codes:
+                seen_codes.add(code)
+                unique_examples.append(se['item'])
+                if len(unique_examples) >= limit:
+                    break
+                    
+        print(f"[FEW-SHOT CLIP] Encontrados {len(unique_examples)} ejemplos históricos similares en entrenamiento.")
+        return unique_examples
+    except Exception as e:
+        print(f"Error al cargar ejemplos históricos relevantes: {e}")
+        return []
+
 def lookup_code_by_image_hash(image_hash):
     """Busca si alguna imagen con el mismo hash ya ha sido confirmada por el usuario."""
     if not image_hash:
@@ -915,8 +970,8 @@ def recognize_product():
                 contents.extend(catalog_file_names)
             candidates_prompt_text = "No se encontraron candidatos vectoriales."
 
-        # 2. Cargar ejemplos Few-Shot diversificados desde el historial de entrenamiento para el Feedback Loop
-        training_examples = load_diversified_training_examples(limit=10)
+        # 2. Cargar ejemplos Few-Shot relevantes usando similitud de vectores CLIP para el Feedback Loop
+        training_examples = load_relevant_training_examples(scanned_vector, limit=3, min_similarity=0.60)
         history_rules = []
         if training_examples:
             print(f"Cargando {len(training_examples)} ejemplos de Few-Shot desde el historial...")
@@ -1368,42 +1423,136 @@ def search_product():
         if df_inventario is None or df_inventario.empty:
             return jsonify({"products": []})
             
-        q_upper = q.upper()
-        # Buscar coincidencias en Clave o en el Nombre del artículo
-        mask = (df_inventario['Clave'].astype(str).str.upper().str.contains(q_upper, na=False) |
-                df_inventario['Nombre del artículo'].astype(str).str.upper().str.contains(q_upper, na=False))
-                
-        results = df_inventario[mask].head(15)
-        
-        products = []
-        for _, row in results.iterrows():
-            product = {
-                'CODIGO': str(row.get('Clave', '')).strip(),
-                'DESCRIPCION': str(row.get('Nombre del artículo', '')).strip(),
-                'MATERIAL': 'ACERO INOXIDABLE',
-                'PRECIO venta publico': float(row.get('Precio público', 0.0))
-            }
-            for col in df_inventario.columns:
-                val = row[col]
-                if pd.isna(val):
-                    if col in ['Precio público', 'Precio mayoreo', 'Almacén general', 'Vista hermosa', 'Paseo']:
-                        product[col] = 0.0
-                    else:
-                        product[col] = ""
-                else:
-                    if col in ['Precio público', 'Precio mayoreo', 'Almacén general', 'Vista hermosa', 'Paseo']:
-                        try:
-                            product[col] = float(val)
-                        except ValueError:
-                            product[col] = 0.0
-                    else:
-                        if isinstance(val, (int, float)):
-                            product[col] = val
-                        else:
-                            product[col] = str(val)
-            products.append(product)
+        import unicodedata
+        def normalize_text(text):
+            if not text:
+                return ""
+            text = text.lower()
+            text = "".join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn')
+            text = re.sub(r'[^\w\s]', ' ', text)
+            return text
             
-        return jsonify({"products": products})
+        SYNONYMS_DICT = {
+            "vino": ["rojo", "vino", "acrilico", "burgundy", "guinda"],
+            "uva": ["rojo", "morado", "acrilico"],
+            "dorado": ["dorado", "oro", "g"],
+            "plateado": ["plateado", "plata", "p", "acero"],
+            "oro": ["dorado", "g", "oro"],
+            "plata": ["plateado", "p", "plata", "acero"],
+            "papa": ["dad", "daddy", "padre", "llavero"],
+            "mama": ["mom", "mother", "madre"],
+            "arete": ["stud", "piercing", "earcuff", "broquel", "arracada"],
+            "piercing": ["arete", "piercing"],
+            "earcuff": ["arete", "earcuff"],
+        }
+        
+        STOP_WORDS = {"de", "con", "para", "la", "el", "un", "una", "los", "las", "y", "en", "del", "al"}
+        
+        query_normalized = normalize_text(q)
+        query_words = [w for w in query_normalized.split() if w not in STOP_WORDS and len(w) > 0]
+        
+        if not query_words:
+            query_words = query_normalized.split()
+            
+        def get_match_score(word, target_text):
+            target_words = target_text.split()
+            best_score = 0
+            for tw in target_words:
+                if word == tw:
+                    current_score = 20
+                elif tw.startswith(word):
+                    current_score = 10
+                elif word in tw:
+                    current_score = 2
+                else:
+                    current_score = 0
+                if current_score > best_score:
+                    best_score = current_score
+            return best_score
+
+        scored_products = []
+        for _, row in df_inventario.iterrows():
+            clave = str(row.get('Clave', '')).strip()
+            nombre = str(row.get('Nombre del artículo', '')).strip()
+            
+            clave_norm = normalize_text(clave)
+            nombre_norm = normalize_text(nombre)
+            
+            score = 0
+            for qw in query_words:
+                # 1. Coincidencia en clave
+                if qw == clave_norm:
+                    score += 40
+                elif clave_norm.startswith(qw):
+                    score += 25
+                elif qw in clave_norm:
+                    score += 5
+                
+                # 2. Coincidencia en nombre
+                score += get_match_score(qw, nombre_norm)
+                
+                # 3. Coincidencias por sinónimos
+                syns = SYNONYMS_DICT.get(qw, [])
+                for syn in syns:
+                    if syn != qw:
+                        if syn == clave_norm:
+                            score += 15
+                        elif clave_norm.startswith(syn):
+                            score += 8
+                        elif syn in clave_norm:
+                            score += 2
+                            
+                        # Buscar sinónimo en palabras del nombre
+                        syn_words = nombre_norm.split()
+                        best_syn_score = 0
+                        for tw in syn_words:
+                            if syn == tw:
+                                current_syn = 8
+                            elif tw.startswith(syn):
+                                current_syn = 4
+                            elif syn in tw:
+                                current_syn = 1
+                            else:
+                                current_syn = 0
+                            if current_syn > best_syn_score:
+                                best_syn_score = current_syn
+                        score += best_syn_score
+                                
+            if score > 0:
+                product = {
+                    'CODIGO': clave,
+                    'DESCRIPCION': nombre,
+                    'MATERIAL': 'ACERO INOXIDABLE',
+                    'PRECIO venta publico': float(row.get('Precio público', 0.0)),
+                    'search_score': score
+                }
+                for col in df_inventario.columns:
+                    val = row[col]
+                    if pd.isna(val):
+                        if col in ['Precio público', 'Precio mayoreo', 'Almacén general', 'Vista hermosa', 'Paseo']:
+                            product[col] = 0.0
+                        else:
+                            product[col] = ""
+                    else:
+                        if col in ['Precio público', 'Precio mayoreo', 'Almacén general', 'Vista hermosa', 'Paseo']:
+                            try:
+                                product[col] = float(val)
+                            except ValueError:
+                                product[col] = 0.0
+                        else:
+                            if isinstance(val, (int, float)):
+                                product[col] = val
+                            else:
+                                product[col] = str(val)
+                scored_products.append(product)
+                
+        scored_products.sort(key=lambda x: x['search_score'], reverse=True)
+        results = scored_products[:15]
+        
+        for r in results:
+            r.pop('search_score', None)
+            
+        return jsonify({"products": results})
         
     code = request.args.get('code', '').strip()
     if not code:
