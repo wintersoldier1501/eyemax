@@ -783,100 +783,6 @@
             font-weight: 800;
             color: white;
         }
-
-        /* Modal de Autorización PIN */
-        .auth-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(5, 5, 8, 0.95);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-            backdrop-filter: blur(10px);
-            animation: fadeIn 0.3s ease;
-        }
-
-        .auth-card {
-            background: #0C0C14;
-            border: 1px solid var(--color-border);
-            border-radius: 20px;
-            padding: 30px;
-            width: 300px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 20px;
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
-            text-align: center;
-            position: relative;
-            animation: slideUp 0.3s ease forwards;
-        }
-
-        .auth-title {
-            color: var(--color-gold);
-            font-size: 18px;
-            font-weight: 700;
-            letter-spacing: 1px;
-        }
-
-        .auth-input {
-            width: 100%;
-            background: #050508;
-            border: 1px solid var(--color-border);
-            border-radius: 12px;
-            padding: 12px;
-            color: white;
-            font-size: 22px;
-            font-weight: 700;
-            text-align: center;
-            letter-spacing: 8px;
-            outline: none;
-            transition: all 0.3s;
-        }
-
-        .auth-input:focus {
-            border-color: var(--color-gold);
-            box-shadow: 0 0 10px rgba(229, 195, 132, 0.2);
-        }
-
-        .auth-btn {
-            width: 100%;
-            background: var(--color-gold);
-            border: none;
-            border-radius: 12px;
-            padding: 12px;
-            color: #0F0F1A;
-            font-weight: 700;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .auth-btn:hover {
-            background: var(--color-gold-light);
-            transform: scale(1.02);
-        }
-
-        .auth-close {
-            position: absolute;
-            top: 12px;
-            right: 12px;
-            background: transparent;
-            border: none;
-            color: var(--color-text-secondary);
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: bold;
-            transition: color 0.2s;
-        }
-
-        .auth-close:hover {
-            color: var(--color-red);
-        }
     </style>
 </head>
 <body>
@@ -1106,26 +1012,6 @@
         </div>
     </div>
 
-    <!-- Modal de Visualización de Catálogo en Pantalla Completa -->
-    <div id="catalogModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 3000; justify-content: center; align-items: center; flex-direction: column; padding: 20px; backdrop-filter: blur(10px);">
-        <button id="closeCatalogModalBtn" style="position: absolute; top: 20px; right: 20px; background: rgba(15,15,26,0.8); border: 1px solid var(--color-border); color: #fff; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: bold; cursor: pointer; z-index: 3010;">✕</button>
-        <div style="width: 100%; height: calc(100% - 60px); display: flex; justify-content: center; align-items: center; overflow: auto;">
-            <img id="catalogModalImg" src="" style="max-width: 100%; max-height: 100%; object-fit: contain; transition: transform 0.2s;" alt="Catálogo Ampliado">
-        </div>
-        <p style="color:var(--color-text-secondary); font-size:11px; margin-top:10px;">Arrastra o haz doble clic para restablecer</p>
-    </div>
-
-    <!-- Modal de Autorización PIN para Confirmar/Corregir -->
-    <div id="authPinModal" class="auth-overlay" style="display: none;">
-        <div class="auth-card">
-            <button id="closeAuthPinBtn" class="auth-close">✕</button>
-            <div class="auth-title">Autorización Requerida</div>
-            <p style="font-size: 11px; color: var(--color-text-secondary); margin-top: -10px;">Ingresa el PIN de Administrador para realizar esta acción:</p>
-            <input type="password" id="authPinInput" class="auth-input" maxlength="4" placeholder="••••">
-            <button id="authPinSubmitBtn" class="auth-btn">Validar PIN</button>
-        </div>
-    </div>
-
     <script>
         const API_URL = ""; // Relativa a nuestro host actual
         let currentImagePath = ""; // Guardar la ruta de la imagen actual para Feedback Loop
@@ -1157,12 +1043,6 @@
         const exactManualSaveBtn = document.getElementById("exactManualSaveBtn");
         const feedbackDivider = document.getElementById("feedbackDivider");
         const exactFeedbackSection = document.getElementById("exactFeedbackSection");
-        
-        // Elementos de Autorización PIN
-        const authPinModal = document.getElementById("authPinModal");
-        const authPinInput = document.getElementById("authPinInput");
-        const authPinSubmitBtn = document.getElementById("authPinSubmitBtn");
-        const closeAuthPinBtn = document.getElementById("closeAuthPinBtn");
         
         const resCode = document.getElementById("resCode");
         const resPiece = document.getElementById("resPiece");
@@ -1403,96 +1283,40 @@
             checkServerStatus();
         }
 
-        let authSuccessCallback = null;
-
-        // Validar token y requerir PIN si no está autenticado
-        function ensureAdminAuth(onSuccess) {
-            const token = localStorage.getItem("admin_token");
-            if (token) {
-                onSuccess();
-            } else {
-                authSuccessCallback = onSuccess;
-                authPinInput.value = "";
-                authPinModal.style.display = "flex";
-                setTimeout(() => authPinInput.focus(), 100);
-            }
-        }
-
-        // Validar el PIN con la API
-        async function submitAuthPin() {
-            const pin = authPinInput.value.trim();
-            if (!pin) {
-                showToast("Ingresa el PIN", true);
-                return;
-            }
-            
-            try {
-                const response = await fetch(`${API_URL}/api/admin/login`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ pin: pin })
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-                    localStorage.setItem("admin_token", data.token);
-                    document.cookie = `admin_token=${data.token}; path=/; max-age=86400`;
-                    
-                    authPinModal.style.display = "none";
-                    showToast("Autorización exitosa", false);
-                    
-                    if (authSuccessCallback) {
-                        authSuccessCallback();
-                        authSuccessCallback = null;
-                    }
-                } else {
-                    const err = await response.json();
-                    showToast(err.error || "PIN incorrecto", true);
-                    authPinInput.value = "";
-                    authPinInput.focus();
-                }
-            } catch (error) {
-                showToast("Error de conexión con el servidor", true);
-            }
-        }
-
-        // Enviar código al endpoint de confirmación y entrenamiento (protegido por PIN)
+        // Enviar código al endpoint de confirmación y entrenamiento
         async function confirmManualCode(code) {
             if (!code) {
                 showToast("Por favor, ingresa o selecciona un código", true);
                 return;
             }
             
-            ensureAdminAuth(async () => {
-                resetUI();
-                loadingContainer.style.display = "flex";
+            resetUI();
+            loadingContainer.style.display = "flex";
+            
+            try {
+                const response = await fetch(`${API_URL}/buscar_codigo_manual`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        codigo: code,
+                        image_path: currentImagePath
+                    })
+                });
                 
-                try {
-                    const response = await fetch(`${API_URL}/buscar_codigo_manual`, {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Authorization": localStorage.getItem("admin_token") || ""
-                        },
-                        body: JSON.stringify({
-                            codigo: code,
-                            image_path: currentImagePath
-                        })
-                    });
-                    
-                    if (response.ok) {
-                        const data = await response.json();
-                        renderResult(data);
-                        showToast("Entrenamiento registrado y pieza confirmada", false);
-                    } else {
-                        const errData = await response.json();
-                        throw new Error(errData.error || "Error al forzar código");
-                    }
-                } catch (error) {
-                    loadingContainer.style.display = "none";
-                    showToast(error.message, true);
+                if (response.ok) {
+                    const data = await response.json();
+                    renderResult(data);
+                    showToast("Entrenamiento registrado y pieza confirmada", false);
+                } else {
+                    const errData = await response.json();
+                    throw new Error(errData.error || "Error al forzar código");
                 }
-            });
+            } catch (error) {
+                loadingContainer.style.display = "none";
+                showToast(error.message, true);
+            }
         }
 
         // Buscar producto por código plano
@@ -1846,24 +1670,6 @@
             }
         });
 
-        // Event Listeners para Modal de Autorización PIN
-        if (authPinSubmitBtn) {
-            authPinSubmitBtn.addEventListener("click", submitAuthPin);
-        }
-        if (authPinInput) {
-            authPinInput.addEventListener("keypress", (e) => {
-                if (e.key === "Enter") {
-                    submitAuthPin();
-                }
-            });
-        }
-        if (closeAuthPinBtn) {
-            closeAuthPinBtn.addEventListener("click", () => {
-                authPinModal.style.display = "none";
-                authSuccessCallback = null;
-            });
-        }
-
         // Polling de estado del servidor
         checkServerStatus();
         setInterval(checkServerStatus, 5000);
@@ -1877,5 +1683,13 @@
             });
         }
     </script>
+    <!-- Modal de Visualización de Catálogo en Pantalla Completa -->
+    <div id="catalogModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 3000; justify-content: center; align-items: center; flex-direction: column; padding: 20px; backdrop-filter: blur(10px);">
+        <button id="closeCatalogModalBtn" style="position: absolute; top: 20px; right: 20px; background: rgba(15,15,26,0.8); border: 1px solid var(--color-border); color: #fff; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: bold; cursor: pointer; z-index: 3010;">✕</button>
+        <div style="width: 100%; height: calc(100% - 60px); display: flex; justify-content: center; align-items: center; overflow: auto;">
+            <img id="catalogModalImg" src="" style="max-width: 100%; max-height: 100%; object-fit: contain; transition: transform 0.2s;" alt="Catálogo Ampliado">
+        </div>
+        <p style="color:var(--color-text-secondary); font-size:11px; margin-top:10px;">Arrastra o haz doble clic para restablecer</p>
+    </div>
 </body>
 </html>
