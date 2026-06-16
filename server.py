@@ -1423,6 +1423,7 @@ def search_product():
         return jsonify({"error": f"El código '{code}' no existe en el inventario."}), 404
 
 @app.route('/buscar_codigo_manual', methods=['POST'])
+@admin_required
 def buscar_codigo_manual():
     data = request.get_json() or {}
     code = data.get('codigo', '').strip()

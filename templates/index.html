@@ -1451,7 +1451,8 @@
                     const response = await fetch(`${API_URL}/buscar_codigo_manual`, {
                         method: "POST",
                         headers: {
-                            "Content-Type": "application/json"
+                            "Content-Type": "application/json",
+                            "Authorization": localStorage.getItem("admin_token") || ""
                         },
                         body: JSON.stringify({
                             codigo: code,
