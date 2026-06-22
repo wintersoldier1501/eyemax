@@ -7,24 +7,43 @@ def classify_product(name):
     name_upper = name.upper()
     categories = []
     
-    # Exclusive primary categories
-    if "ARETE" in name_upper or "BROQUEL" in name_upper or "ARRACADA" in name_upper or "TOPITO" in name_upper:
+    # Extract prefix before hyphen
+    first_part = name_upper.split('-')[0].strip()
+    
+    # Exclusive primary categories based on prefix first
+    if "ARETE" in first_part or "BROQUEL" in first_part or "ARRACADA" in first_part or "TOPITO" in first_part:
         categories.append("ARETE")
-    elif "PIERCING" in name_upper:
+    elif "PIERCING" in first_part:
         categories.append("PIERCING")
-    elif "EARCUFF" in name_upper or "EAR CUFF" in name_upper:
+    elif "EARCUFF" in first_part or "EAR CUFF" in first_part:
         categories.append("EARCUFF")
-    elif "ANILLO" in name_upper:
+    elif "ANILLO" in first_part:
         categories.append("ANILLO")
-    elif "PULSERA" in name_upper or "SEMANARIO" in name_upper or "BRAZALETE" in name_upper or "TOBILLERA" in name_upper:
+    elif "PULSERA" in first_part or "SEMANARIO" in first_part or "BRAZALETE" in first_part or "TOBILLERA" in first_part:
         categories.append("PULSERA")
-    elif "COLLAR" in name_upper or "CADENA" in name_upper or "GARGANTILLA" in name_upper or "CHOKER" in name_upper or "GARGANTILLAS" in name_upper:
+    elif "COLLAR" in first_part or "CADENA" in first_part or "GARGANTILLA" in first_part or "CHOKER" in first_part or "GARGANTILLAS" in first_part:
         categories.append("COLLAR")
-    elif "LLAVERO" in name_upper:
+    elif "LLAVERO" in first_part:
         categories.append("LLAVERO")
     else:
-        if "DIJE" in name_upper:
+        # Fallback to whole name search
+        if "ARETE" in name_upper or "BROQUEL" in name_upper or "ARRACADA" in name_upper or "TOPITO" in name_upper:
+            categories.append("ARETE")
+        elif "PIERCING" in name_upper:
+            categories.append("PIERCING")
+        elif "EARCUFF" in name_upper or "EAR CUFF" in name_upper:
+            categories.append("EARCUFF")
+        elif "ANILLO" in name_upper:
+            categories.append("ANILLO")
+        elif "PULSERA" in name_upper or "SEMANARIO" in name_upper or "BRAZALETE" in name_upper or "TOBILLERA" in name_upper:
+            categories.append("PULSERA")
+        elif "COLLAR" in name_upper or "CADENA" in name_upper or "GARGANTILLA" in name_upper or "CHOKER" in name_upper or "GARGANTILLAS" in name_upper:
             categories.append("COLLAR")
+        elif "LLAVERO" in name_upper:
+            categories.append("LLAVERO")
+        else:
+            if "DIJE" in name_upper:
+                categories.append("COLLAR")
             
     # Orthogonal characteristics
     if "GRABABLE" in name_upper or "PLACA" in name_upper or "ESCLAVA" in name_upper or "MEDALLA" in name_upper:
@@ -34,6 +53,19 @@ def classify_product(name):
         categories.append("PERSONALIZADO")
         
     return categories
+
+def filter_substring_matches(found_keys):
+    sorted_keys = sorted(found_keys, key=len, reverse=True)
+    clean_keys = []
+    for k in sorted_keys:
+        is_sub = False
+        for accepted in clean_keys:
+            if k in accepted:
+                is_sub = True
+                break
+        if not is_sub:
+            clean_keys.append(k)
+    return clean_keys
 
 def build_range_string(pages, gap_tolerance=15):
     if not pages:
@@ -126,11 +158,17 @@ def main():
                 text = doc[p_idx].get_text("text").upper()
                 
                 # Check which keys are present on this page
-                found_keys = []
+                raw_keys = []
                 for clave in claves_set:
                     if clave in text:
-                        found_keys.append(clave)
+                        raw_keys.append(clave)
                         
+                if not raw_keys:
+                    continue
+                    
+                # Clean up substring overlaps (e.g. AX186 matching inside AX1861-G)
+                found_keys = filter_substring_matches(raw_keys)
+                
                 # Classify the keys and add page to category lists
                 page_cats = {}
                 total_matches = 0
