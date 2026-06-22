@@ -13,8 +13,14 @@ assets/cache_recortes/
 # Archivos temporales de Excel
 ~$*
 
-# Directorio de scripts temporales
-scratch/
+# Directorio de scripts temporales (ahora permitimos los scripts pero ignoramos modelos pesados)
+scratch/*.onnx
+scratch/__pycache__/
+scratch/*.pyc
+
+# Archivos de respaldo
+*.bak
 
 # Recortes del catálogo para RAG
 assets/catalog_crops/
+assets/entrenamiento/

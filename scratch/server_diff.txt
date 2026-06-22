@@ -1,0 +1,270 @@
+--- versiones/server.py
++++ server.py
+@@ -320,4 +320,66 @@
+         return "joyeria"
+ 
++def get_image_augmented_descriptions(image_path):
++    """
++    Llama a Gemini 3.5 Flash para obtener 3 descripciones visuales para entrenamiento:
++    1. Perspectiva frontal estándar (forma, color, tipo de pieza).
++    2. Perspectiva con reflejos metálicos o desde un ángulo alternativo.
++    3. Close-up o zoom de detalles específicos, texturas o patrones distintivos.
++    Retorna una lista de 3 strings en español.
++    """
++    global gemini_configured
++    if not gemini_configured or not os.path.exists(image_path):
++        return ["joyeria", "joyeria con reflejos", "detalle de joyeria"]
++    try:
++        print(f"Generando 3 descripciones visuales aumentadas para '{image_path}' con Gemini...")
++        model = genai.GenerativeModel('gemini-3.5-flash')
++        with open(image_path, 'rb') as f:
++            img_bytes = f.read()
++        
++        mime_type = 'image/jpeg'
++        if image_path.lower().endswith('.png'):
++            mime_type = 'image/png'
++        elif image_path.lower().endswith('.gif'):
++            mime_type = 'image/gif'
++        elif image_path.lower().endswith('.webp'):
++            mime_type = 'image/webp'
++            
++        prompt = (
++            "Analiza esta pieza de joyería en la imagen y genera exactamente 3 descripciones cortas en español "
++            "(de 5 a 10 palabras cada una) adaptadas a diferentes escenarios de escaneo para reconocimiento:\n"
++            "1. Perspectiva frontal estándar (tipo de pieza, color, forma principal).\n"
++            "2. Perspectiva con reflejos metálicos o bajo iluminación intensa, o desde un ángulo alternativo.\n"
++            "3. Close-up, acercamiento o zoom de detalles específicos, dijes, texturas o patrones grabados.\n\n"
++            "Devuelve estrictamente un arreglo JSON de 3 strings. Ejemplo de salida:\n"
++            "[\n"
++            "  \"pulsera de cuero negro con dije de cruz dorada\",\n"
++            "  \"dije dorado brillante con reflejos y correa trenzada oscura\",\n"
++            "  \"detalle de cruz de acero inoxidable grabada en correa de cuero\"\n"
++            "]"
++        )
++        
++        response = model.generate_content([
++            {'mime_type': mime_type, 'data': img_bytes},
++            prompt
++        ], generation_config={"response_mime_type": "application/json"})
++        increment_query_count()
++        raw_json = response.text.strip()
++        print(f"JSON de descripciones aumentadas generado: {raw_json}")
++        
++        descs = json.loads(raw_json)
++        if isinstance(descs, list) and len(descs) >= 3:
++            return [str(d).strip() for d in descs[:3]]
++        
++        if isinstance(descs, list) and len(descs) > 0:
++            val = str(descs[0]).strip()
++            return [val, val + " con reflejos", "detalle de " + val]
++            
++    except Exception as e:
++        print(f"Error generando descripciones aumentadas: {e}")
++    
++    single_desc = get_image_visual_description(image_path)
++    return [single_desc, single_desc + " con reflejos", "detalle de " + single_desc]
++
++
+ def load_page_config():
+     config_path = 'config_paginas.json'
+@@ -380,5 +442,7 @@
+                 # Si es un código diferente, actualizar
+                 item['codigo'] = code
+-                item['descripcion_visual'] = get_image_visual_description(image_path)
++                aug_descs = get_image_augmented_descriptions(image_path)
++                item['descripciones_aumentadas'] = aug_descs
++                item['descripcion_visual'] = aug_descs[0] if aug_descs else "joyeria"
+                 try:
+                     with open(history_file, 'w', encoding='utf-8') as f:
+@@ -409,10 +473,11 @@
+ 
+     # Generar descripción visual en el momento
+-    desc = get_image_visual_description(image_path)
++    aug_descs = get_image_augmented_descriptions(image_path)
+     new_record = {
+         'image_path': image_path_norm,
+         'image_hash': image_hash,
+         'codigo': code,
+-        'descripcion_visual': desc
++        'descripcion_visual': aug_descs[0] if aug_descs else "joyeria",
++        'descripciones_aumentadas': aug_descs
+     }
+     
+@@ -421,5 +486,5 @@
+         with open(history_file, 'w', encoding='utf-8') as f:
+             json.dump(history, f, indent=2, ensure_ascii=False)
+-        print(f"[HISTORIAL] Guardado entrenamiento nuevo: {image_path_norm} -> {code} ({desc})")
++        print(f"[HISTORIAL] Guardado entrenamiento nuevo: {image_path_norm} -> {code} ({aug_descs})")
+     except Exception as e:
+         print(f"Error al escribir en {history_file}: {e}")
+@@ -562,4 +627,5 @@
+         if catalog_name and page_num:
+             product_data['catalog_page_url'] = f"/api/catalog_page/{catalog_name}/{page_num}"
++            product_data['catalog_crop_url'] = f"/api/catalog_crop/{catalog_name}/{page_num}/{code_candidate}"
+         return jsonify(product_data)
+ 
+@@ -583,4 +649,5 @@
+             if catalog_name and page_num:
+                 product_data['catalog_page_url'] = f"/api/catalog_page/{catalog_name}/{page_num}"
++                product_data['catalog_crop_url'] = f"/api/catalog_crop/{catalog_name}/{page_num}/{confirmed_code_from_hash}"
+             return jsonify(product_data)
+ 
+@@ -642,8 +709,14 @@
+                 ex_path = ex.get('image_path')
+                 ex_code = ex.get('codigo')
+-                ex_desc = ex.get('descripcion_visual', 'joyeria')
++                
++                descs = ex.get('descripciones_aumentadas')
++                if descs and isinstance(descs, list) and len(descs) >= 3:
++                    desc_text = f"Frontal: {descs[0]} | Reflejos: {descs[1]} | Detalle/Zoom: {descs[2]}"
++                else:
++                    fallback_desc = ex.get('descripcion_visual', 'joyeria')
++                    desc_text = f"Frontal: {fallback_desc} | Reflejos: {fallback_desc} | Detalle/Zoom: {fallback_desc}"
+                 
+                 # Regla de texto para el prompt
+-                history_rules.append(f"- Código '{ex_code}': {ex_desc}")
++                history_rules.append(f"- Código '{ex_code}': {desc_text}")
+                 
+                 # Adjuntar imagen física si existe
+@@ -665,5 +738,5 @@
+                             'data': ex_bytes
+                         })
+-                        contents.append(f"Ejemplo de entrenamiento real: Esta imagen corresponde al artículo con código '{ex_code}'. Características: {ex_desc}")
++                        contents.append(f"Ejemplo de entrenamiento real: Esta imagen corresponde al artículo con código '{ex_code}'. Características: {desc_text}")
+                     except Exception as err:
+                         print(f"Error al cargar imagen de ejemplo {ex_path}: {err}")
+@@ -755,4 +828,5 @@
+                 if catalog_name and page_num:
+                     product_data['catalog_page_url'] = f"/api/catalog_page/{catalog_name}/{page_num}"
++                    product_data['catalog_crop_url'] = f"/api/catalog_crop/{catalog_name}/{page_num}/{code_clean}"
+                 return jsonify(product_data)
+             else:
+@@ -775,4 +849,8 @@
+                 if sug_prod:
+                     sug_prod['mode'] = 'GEMINI_REAL'
++                    catalog_name, page_num = find_page_for_code(sug_clean)
++                    if catalog_name and page_num:
++                        sug_prod['catalog_page_url'] = f"/api/catalog_page/{catalog_name}/{page_num}"
++                        sug_prod['catalog_crop_url'] = f"/api/catalog_crop/{catalog_name}/{page_num}/{sug_clean}"
+                     products.append(sug_prod)
+             
+@@ -795,4 +873,5 @@
+                     if catalog_name and page_num:
+                         product_data['catalog_page_url'] = f"/api/catalog_page/{catalog_name}/{page_num}"
++                        product_data['catalog_crop_url'] = f"/api/catalog_crop/{catalog_name}/{page_num}/{code_clean}"
+                     return jsonify(product_data)
+             
+@@ -1004,4 +1083,82 @@
+ 
+ 
++@app.route('/api/catalog_crop/<catalog_name>/<int:page_num>/<code>', methods=['GET'])
++def api_catalog_crop(catalog_name, page_num, code):
++    """
++    Busca las coordenadas del código en la página del catálogo especificada,
++    realiza un recorte de 300x300 puntos a su alrededor y lo sirve.
++    Usa caché en assets/cache_recortes/.
++    """
++    catalog_name = os.path.basename(catalog_name)
++    if catalog_name not in ["CATALOGO 1.pdf", "CATALOGO 2.pdf"]:
++        return jsonify({"error": "Catálogo no válido"}), 400
++        
++    code_clean = str(code).strip().upper()
++    if not code_clean:
++        return jsonify({"error": "Código no válido"}), 400
++        
++    cache_dir = os.path.join(app.root_path, "assets", "cache_recortes")
++    os.makedirs(cache_dir, exist_ok=True)
++    
++    # Nombre del archivo recortado en caché
++    safe_name = catalog_name.replace(" ", "_")
++    safe_code = re.sub(r'[^A-Z0-9]', '_', code_clean)
++    cache_filename = f"crop_{safe_name}_{page_num}_{safe_code}.jpg"
++    cache_filepath = os.path.join(cache_dir, cache_filename)
++    
++    if os.path.exists(cache_filepath):
++        return send_from_directory(cache_dir, cache_filename)
++        
++    if not os.path.exists(catalog_name):
++        return jsonify({"error": f"Catálogo {catalog_name} no encontrado"}), 404
++        
++    try:
++        doc = fitz.open(catalog_name)
++        if page_num < 1 or page_num > len(doc):
++            doc.close()
++            return jsonify({"error": "Página fuera de rango"}), 400
++            
++        page = doc[page_num - 1]
++        
++        # 1. Buscar coordenadas del código en la página
++        rects = page.search_for(code_clean)
++        
++        # Si no se encuentra, probar con el código base (removiendo sufijos P/G)
++        if not rects:
++            base_match = re.match(r'^([A-Z0-9]+?\d+)', code_clean)
++            if base_match:
++                base_code = base_match.group(1)
++                if base_code != code_clean and len(base_code) >= 3:
++                    rects = page.search_for(base_code)
++                    
++        # Si de todas formas no se encuentra, usar una zona predeterminada (centro de la página)
++        if rects:
++            rect = rects[0]
++            cx = (rect.x0 + rect.x1) / 2
++            cy = (rect.y0 + rect.y1) / 2
++            
++            x0 = max(0, cx - 150)
++            y0 = max(0, cy - 150)
++            x1 = min(page.rect.width, cx + 150)
++            y1 = min(page.rect.height, cy + 150)
++            crop_rect = fitz.Rect(x0, y0, x1, y1)
++        else:
++            w = page.rect.width
++            h = page.rect.height
++            crop_rect = fitz.Rect(max(0, w/2 - 150), max(0, h/2 - 150), min(w, w/2 + 150), min(h, h/2 + 150))
++            print(f"[CROP FALLBACK] Código '{code_clean}' no encontrado en página {page_num}. Usando cuadrante central.")
++            
++        zoom = 150 / 72  # 150 DPI
++        matrix = fitz.Matrix(zoom, zoom)
++        pix = page.get_pixmap(matrix=matrix, clip=crop_rect)
++        pix.save(cache_filepath)
++        doc.close()
++        
++        return send_from_directory(cache_dir, cache_filename)
++    except Exception as e:
++        print(f"Error al generar recorte de catálogo para '{code_clean}': {e}")
++        return jsonify({"error": f"Error al procesar PDF: {str(e)}"}), 500
++
++
+ 
+ @app.route('/api/search', methods=['GET'])
+@@ -1022,6 +1179,7 @@
+         products = []
+         for _, row in results.iterrows():
++            code_val = str(row.get('Clave', '')).strip()
+             product = {
+-                'CODIGO': str(row.get('Clave', '')).strip(),
++                'CODIGO': code_val,
+                 'DESCRIPCION': str(row.get('Nombre del artículo', '')).strip(),
+                 'MATERIAL': 'ACERO INOXIDABLE',
+@@ -1046,4 +1204,9 @@
+                         else:
+                             product[col] = str(val)
++            
++            catalog_name, page_num = find_page_for_code(code_val)
++            if catalog_name and page_num:
++                product['catalog_page_url'] = f"/api/catalog_page/{catalog_name}/{page_num}"
++                product['catalog_crop_url'] = f"/api/catalog_crop/{catalog_name}/{page_num}/{code_val}"
+             products.append(product)
+             
+@@ -1063,4 +1226,5 @@
+         if catalog_name and page_num:
+             product_data['catalog_page_url'] = f"/api/catalog_page/{catalog_name}/{page_num}"
++            product_data['catalog_crop_url'] = f"/api/catalog_crop/{catalog_name}/{page_num}/{code}"
+             print(f"[CATALOGO PAGE] Encontrado en '{catalog_name}', Página {page_num}")
+         return jsonify(product_data)
+@@ -1093,4 +1257,5 @@
+         if catalog_name and page_num:
+             product_data['catalog_page_url'] = f"/api/catalog_page/{catalog_name}/{page_num}"
++            product_data['catalog_crop_url'] = f"/api/catalog_crop/{catalog_name}/{page_num}/{product_data['CODIGO']}"
+         return jsonify(product_data)
+     else:

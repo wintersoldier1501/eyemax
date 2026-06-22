@@ -1,0 +1,50 @@
+
+==================================================
+STEP 3852: replace_file_content
+Description: "Implement circular canvas masking in capturePhoto in templates/index.html"
+Lines: [1635, 1656]
+TargetContent:
+"        // Tomar foto y capturar bytes\n        function capturePhoto() {\n            if (!videoStream) return;\n            \n            const width = cameraVideo.videoWidth || 640;\n            const height = cameraVideo.videoHeight || 480;\n            cameraCanvas.width = width;\n            cameraCanvas.height = height;\n            \n            const ctx = cameraCanvas.getContext(\"2d\");\n            ctx.drawImage(cameraVideo, 0, 0, width, height);\n            \n            cameraCanvas.toBlob((blob) => {\n                if (blob) {\n                    const file = new File([blob], `capture_${Date.now()}.jpg`, { type: \"image/jpeg\" });\n                    processAndUploadImage(file);\n                } else {\n                    showToast(\"Error al capturar la imagen del visor\", true);\n                }\n                stopCamera();\n            }, \"image/jpeg\", 0.92);\n        }"
+ReplacementContent:
+"        // Tomar foto y capturar bytes\n        function capturePhoto() {\n            if (!videoStream) return;\n            \n            const width = cameraVideo.videoWidth || 640;\n            const height = cameraVideo.videoHeight || 480;\n            cameraCanvas.width = width;\n            cameraCanvas.height = height;\n            \n            const ctx = cameraCanvas.getContext(\"2d\");\n            ctx.drawImage(cameraVideo, 0, 0, width, height);\n            \n            // Aislamiento de fondo: enmascarar fuera del círculo de enfoque central\n            const centerX = width / 2;\n            const centerY = height / 2;\n            // El círculo guía mide aprox. el 60% del menor de los lados (radio = 30%)\n            const radius = Math.min(width, height) * 0.3;\n            \n            ctx.save();\n            ctx.beginPath();\n            ctx.rect(0, 0, width, height);\n            // Dibujar círculo en sentido antihorario para restarlo\n            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2, true);\n            ctx.closePath();\n            \n            ctx.fillStyle = \"rgba(5, 5, 8, 1)\"; // Negro absoluto a juego con el tema oscuro\n            ctx.fill();\n            ctx.restore();\n            \n            cameraCanvas.toBlob((blob) => {\n                if (blob) {\n                    const file = new File([blob], `capture_${Date.now()}.jpg`, { type: \"image/jpeg\" });\n                    processAndUploadImage(file);\n                } else {\n                    showToast(\"Error al capturar la imagen del visor\", true);\n                }\n                stopCamera();\n            }, \"image/jpeg\", 0.92);\n        }"
+
+==================================================
+STEP 3914: multi_replace_file_content
+Description: "Update frontend result card and suggestions UI to show crop, and add a toggleable accordion for the full catalog page."
+Chunks is not a list (type <class 'str'>): '[{"AllowMultiple":false,"EndLine":991,"ReplacementContent":"                <!-- Vista de Coincidencia Exacta -->\\n                <div id=\\"exactResultView\\">\\n                    \\n                    <!-- Fila 1: Imagen de Catálogo (Recorte) y Código/Pieza -->\\n                    <div class=\\"result-row\\" style=\\"display: flex; gap: 16px; align-items: center; width: 100%; margin-bottom: 4px;\\">\\n                        <!-- Contenedor del Recorte del Catálogo -->\\n                        <div id=\\"catalogCropContainer\\" style=\\"display: none; width: 100px; height: 100px; border-radius: 16px; border: 2px solid var(--color-gold); overflow: hidden; background: #000; box-shadow: 0 4px 12px rgba(229,195,132,0.15); flex-shrink: 0; cursor: pointer;\\">\\n                            <img id=\\"catalogCropImg\\" src=\\"\\" style=\\"width: 100%; height: 100%; object-fit: cover;\\" alt=\\"Detalle Catálogo\\">\\n                        </div>\\n                        <!-- Especificaciones Rápidas -->\\n                        <div style=\\"flex-grow: 1; display: flex; flex-direction: column; gap: 8px;\\">\\n                            <div style=\\"display: flex; justify-content: space-between; align-items: flex-start; width: 100%;\\">\\n                                <div class=\\"col-left\\">\\n                                    <span class=\\"field-label\\">Código</span>\\n                                    <span class=\\"field-value highlight-gold\\" id=\\"resCode\\" style=\\"font-size: 18px; line-height: 1.2;\\">AX1856</span>\\n                                </div>\\n                                <div class=\\"col-right align-right\\">\\n                                    <div style=\\"display:flex; flex-direction:row; align-items:center; gap: 8px;\\">\\n                                        <div style=\\"display:flex; flex-direction:column; align-items:flex-end;\\">\\n                                            <span class=\\"field-label\\">Pieza</span>\\n                                            <span class=\\"field-value\\" id=\\"resPiece\\" s\n<truncated 33227 bytes>'
+
+==================================================
+STEP 3920: replace_file_content
+Description: "Fix syntax error in renderResult close brace"
+Lines: [1353, 1361]
+TargetContent:
+"            }\n            \n            resultCard.style.display = \"flex\";\n            // Actualizar el estado y contador de consultas inmediatamente\n            checkServerStatus();\n        } el estado y contador de consultas inmediatamente\n            checkServerStatus();\n        }"
+ReplacementContent:
+"        }"
+
+==================================================
+STEP 3926: replace_file_content
+Description: "Restore missing closing braces and result card display logic in renderResult"
+Lines: [1352, 1354]
+TargetContent:
+"                }\n        }"
+ReplacementContent:
+"            }\n            \n            resultCard.style.display = \"flex\";\n            // Actualizar el estado y contador de consultas inmediatamente\n            checkServerStatus();\n        }"
+
+==================================================
+STEP 3930: replace_file_content
+Description: "Add closing brace for outer else block in renderResult"
+Lines: [1351, 1353]
+TargetContent:
+"                    if (catalogPageImg) catalogPageImg.src = \"\";\n            }"
+ReplacementContent:
+"                    if (catalogPageImg) catalogPageImg.src = \"\";\n                }\n            }"
+
+==================================================
+STEP 3975: replace_file_content
+Description: "Close checkServerStatus function and catch block properly to fix Javascript syntax error"
+Lines: [1225, 1228]
+TargetContent:
+"            } catch (error) {\n                statusBadge.className = \"status-badge offline\";\n            // Mostrar datos en la tarjeta de resultados\n        function renderResult(data) {"
+ReplacementContent:
+"            } catch (error) {\n                statusBadge.className = \"status-badge offline\";\n                statusText.textContent = \"● Offline\";\n            }\n        }\n\n        // Mostrar datos en la tarjeta de resultados\n        function renderResult(data) {"

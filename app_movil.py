@@ -57,12 +57,14 @@ async def main(page: ft.Page):
                 mime_type = "image/webp"
                 
             files = {'image': (file_name, file_bytes, mime_type)}
-            print(f"Enviando imagen real '{file_name}' ({len(file_bytes)} bytes) al servidor...")
+            data_payload = {'category': category_dropdown.value or "Ninguno"}
+            print(f"Enviando imagen real '{file_name}' ({len(file_bytes)} bytes) con categoría '{data_payload['category']}' al servidor...")
             
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"{SERVER_URL}/api/recognize",
                     files=files,
+                    data=data_payload,
                     timeout=120.0
                 )
                 
@@ -185,6 +187,26 @@ async def main(page: ft.Page):
         label_style=ft.TextStyle(color=COLOR_TEXT_SECONDARY, size=11)
     )
 
+    category_dropdown = ft.Dropdown(
+        label="Filtrar por Categoría",
+        value="Ninguno",
+        options=[
+            ft.dropdown.Option("Ninguno"),
+            ft.dropdown.Option("Aretes"),
+            ft.dropdown.Option("Piercing"),
+            ft.dropdown.Option("Anillo"),
+            ft.dropdown.Option("Pulsera"),
+            ft.dropdown.Option("Collar"),
+            ft.dropdown.Option("Llavero")
+        ],
+        border_color=COLOR_GOLD,
+        focused_border_color=COLOR_GOLD_LIGHT,
+        color=COLOR_TEXT_PRIMARY,
+        label_style=ft.TextStyle(color=COLOR_TEXT_SECONDARY, size=11),
+        width=280,
+        height=50,
+    )
+
     # Detectar si estamos en un dispositivo móvil
     is_mobile = page.platform in ["android", "ios"]
     
@@ -232,6 +254,7 @@ async def main(page: ft.Page):
                 text_align=ft.TextAlign.CENTER
             ),
             ft.Container(height=5),
+            category_dropdown,
             code_input,
             select_photo_btn,
         ],
@@ -244,7 +267,7 @@ async def main(page: ft.Page):
     camera_card = ft.Container(
         content=camera_view_content,
         width=330,
-        height=330,
+        height=350,
         bgcolor=COLOR_DARK_CARD,
         border=ft.Border.all(1, COLOR_BORDER),
         border_radius=24,
@@ -368,12 +391,14 @@ async def main(page: ft.Page):
             # Enviar bytes simulados
             file_bytes = b"simulated image data"
             files = {'image': (file_name_with_ext, file_bytes, 'image/jpeg')}
-            print(f"Enviando solicitud simulada para '{file_name_with_ext}' al servidor...")
+            data_payload = {'category': category_dropdown.value or "Ninguno"}
+            print(f"Enviando solicitud simulada para '{file_name_with_ext}' con categoría '{data_payload['category']}' al servidor...")
             
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"{SERVER_URL}/api/recognize",
                     files=files,
+                    data=data_payload,
                     timeout=120.0
                 )
                 

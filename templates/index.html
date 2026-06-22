@@ -242,6 +242,49 @@
             height: 15px;
         }
 
+        /* Selector de Categoría Premium */
+        .category-select-wrapper {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .category-select-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--color-text-secondary);
+            font-weight: 700;
+            margin-left: 2px;
+        }
+
+        .category-select {
+            width: 100%;
+            background: rgba(35, 35, 38, 0.9);
+            border: 1.5px solid var(--color-border);
+            border-radius: 12px;
+            padding: 10px 32px 10px 14px;
+            color: var(--color-text-primary);
+            font-size: 14px;
+            font-weight: 600;
+            outline: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-image: url("data:image/svg+xml;utf8,<svg fill='%23e5c384' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/><path d='M0 0h24v24H0z' fill='none'/></svg>");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+            background-size: 20px;
+        }
+
+        .category-select:focus {
+            border-color: var(--color-gold);
+            box-shadow: 0 0 10px rgba(229, 195, 132, 0.2);
+        }
+
         /* Visor de Imagen / Previsualización */
         .image-preview-container {
             width: 100%;
@@ -847,6 +890,20 @@
 
             <!-- Pestaña 2: Escanear / Visor -->
             <div id="scanTabContent" style="display: block; width: 100%; display: flex; flex-direction: column; gap: 16px;">
+                <!-- Selector de Categoría -->
+                <div class="category-select-wrapper">
+                    <span class="category-select-label">Filtrar por Categoría</span>
+                    <select id="scanCategoryFilter" class="category-select">
+                        <option value="Ninguno">Ninguno (Búsqueda general)</option>
+                        <option value="Aretes">Aretes</option>
+                        <option value="Piercing">Piercing</option>
+                        <option value="Anillo">Anillos</option>
+                        <option value="Pulsera">Pulseras</option>
+                        <option value="Collar">Collares / Cadenas</option>
+                        <option value="Llavero">Llaveros</option>
+                    </select>
+                </div>
+
                 <!-- Visor de Previsualización -->
                 <div class="image-preview-container" id="previewContainer">
                     <img id="previewImg" class="preview-img" alt="Previsualización">
@@ -1364,6 +1421,11 @@
 
             const formData = new FormData();
             formData.append("image", file);
+            
+            const categorySelect = document.getElementById("scanCategoryFilter");
+            if (categorySelect) {
+                formData.append("category", categorySelect.value);
+            }
 
             try {
                 const response = await fetch(`${API_URL}/api/recognize`, {

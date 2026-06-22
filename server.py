@@ -641,10 +641,8 @@ def load_relevant_training_examples(query_vector, category_filter=None, limit=3,
             
             if code and img_path and vector and os.path.exists(img_path):
                 # Filtro por categoría opcional
-                if category_filter and category_filter != "UNKNOWN":
-                    prod = get_product_by_code(code)
-                    prod_cat = get_category_from_product(prod)
-                    if prod_cat != category_filter:
+                if category_filter:
+                    if not matches_category_filter(code, category_filter):
                         continue
                         
                 sim = cosine_similarity(query_vector, vector)
@@ -707,6 +705,33 @@ def get_image_path_by_hash(image_hash):
     except Exception as e:
         pass
     return None
+
+def matches_category_filter(product_code, category_filter):
+    """
+    Verifica si la descripción de un producto coincide con la categoría seleccionada por el usuario.
+    """
+    if not category_filter or category_filter.upper() in ["NINGUNO", "ALL", ""]:
+        return True
+    prod = get_product_by_code(product_code)
+    if not prod:
+        return True # Si no está en inventario, lo dejamos por seguridad
+        
+    desc = str(prod.get('DESCRIPCION', '')).upper()
+    cat = category_filter.upper()
+    
+    if cat == "ARETES":
+        return any(x in desc for x in ["ARETE", "STUD", "ARRACADA", "BROQUEL"])
+    elif cat == "PIERCING":
+        return any(x in desc for x in ["PIERCING", "EARCUFF"])
+    elif cat == "ANILLO":
+        return "ANILLO" in desc
+    elif cat == "PULSERA":
+        return any(x in desc for x in ["PULSERA", "BRAZALETE", "TOBILLERA"])
+    elif cat == "COLLAR":
+        return any(x in desc for x in ["COLLAR", "GARGANTILLA", "DIJE", "CADENA", "CHOKER"])
+    elif cat == "LLAVERO":
+        return "LLAVERO" in desc
+    return True
 
 def get_product_by_code(code):
     """Busca un producto en el inventario por su clave y lo mapea para compatibilidad con el frontend."""
@@ -774,9 +799,14 @@ def recognize_product():
     else:
         code_candidate = file.filename.upper().strip()
 
+    # Obtener filtro de categoría enviado por el cliente
+    category_filter = request.form.get('category', '').strip() or request.args.get('category', '').strip()
+    if category_filter:
+        print(f"[FILTRO CATEGORIA] Filtro manual activo: '{category_filter}'")
+
     product_data = get_product_by_code(code_candidate)
-    if product_data:
-        print(f"[BUSQUEDA DIRECTA PANDAS] Código '{code_candidate}' detectado. Retornando datos de inventario sin llamar a Gemini.")
+    if product_data and matches_category_filter(code_candidate, category_filter):
+        print(f"[BUSQUEDA DIRECTA PANDAS] Código '{code_candidate}' detectado y coincide con categoría. Retornando datos de inventario sin llamar a Gemini.")
         product_data['mode'] = 'PANDAS_DIRECT'
         catalog_name, page_num = find_page_for_code(code_candidate)
         if catalog_name and page_num:
@@ -792,8 +822,8 @@ def recognize_product():
     import hashlib
     image_hash = hashlib.sha256(image_bytes).hexdigest()
     confirmed_code_from_hash = lookup_code_by_image_hash(image_hash)
-    if confirmed_code_from_hash:
-        print(f"[MEMORIA EXACTA] Imagen idéntica encontrada en el historial con el código '{confirmed_code_from_hash}'.")
+    if confirmed_code_from_hash and matches_category_filter(confirmed_code_from_hash, category_filter):
+        print(f"[MEMORIA EXACTA] Imagen idéntica encontrada en el historial con el código '{confirmed_code_from_hash}' y coincide con categoría.")
         product_data = get_product_by_code(confirmed_code_from_hash)
         if product_data:
             product_data['mode'] = 'MEMORY_HASH_MATCH'
@@ -827,6 +857,8 @@ def recognize_product():
                     item_vector = item.get('vector_embeddings')
                     code = item.get('codigo')
                     if item_vector and code:
+                        if not matches_category_filter(code, category_filter):
+                            continue
                         sim = cosine_similarity(scanned_vector, item_vector)
                         if code not in scores_by_code or sim > scores_by_code[code]['sim']:
                             scores_by_code[code] = {'sim': sim, 'item': item}
@@ -850,6 +882,8 @@ def recognize_product():
                     item_vector = item.get('vector_embeddings')
                     code = item.get('codigo')
                     if item_vector and code:
+                        if not matches_category_filter(code, category_filter):
+                            continue
                         sim = cosine_similarity(scanned_vector, item_vector)
                         if code not in cat_scores or sim > cat_scores[code]['sim']:
                             cat_scores[code] = {'sim': sim, 'item': item}
@@ -971,7 +1005,7 @@ def recognize_product():
             candidates_prompt_text = "No se encontraron candidatos vectoriales."
 
         # 2. Cargar ejemplos Few-Shot relevantes usando similitud de vectores CLIP para el Feedback Loop
-        training_examples = load_relevant_training_examples(scanned_vector, limit=3, min_similarity=0.60)
+        training_examples = load_relevant_training_examples(scanned_vector, category_filter=category_filter, limit=3, min_similarity=0.60)
         history_rules = []
         if training_examples:
             print(f"Cargando {len(training_examples)} ejemplos de Few-Shot desde el historial...")
@@ -1032,8 +1066,16 @@ def recognize_product():
             "  }\n"
             "Asegúrate de que los códigos de producto devueltos existan en el catálogo y estén escritos exactamente igual."
         )
-        
+
         # 4. Configurar instrucciones del sistema y segmentación por categoría
+        category_instruction = ""
+        if category_filter and category_filter.upper() != "NINGUNO":
+            category_instruction = (
+                f"FILTRO MANUAL DE CATEGORÍA ACTIVO: El usuario ha seleccionado que esta pieza pertenece a la categoría '{category_filter.upper()}'.\n"
+                f"Por lo tanto, la pieza escaneada es estrictamente de la categoría '{category_filter.upper()}'.\n"
+                "Ignora y descarta cualquier otro tipo de producto. Tu respuesta debe restringirse únicamente a códigos correspondientes a esta categoría.\n\n"
+            )
+
         segmentation_instruction = (
             "REGLAS DE SEGMENTACIÓN POR CONFIGURACIÓN DE PÁGINAS:\n"
             "Para maximizar la precisión de búsqueda visual en el catálogo, primero identifica mentalmente a qué categoría pertenece el artículo escaneado "
@@ -1070,6 +1112,7 @@ def recognize_product():
             generation_config={"response_mime_type": "application/json"},
             system_instruction=(
                 "Eres un asistente experto en reconocimiento visual de joyería para Eyemax.\n\n"
+                f"{category_instruction}"
                 f"{rag_instruction}\n\n"
                 f"{segmentation_instruction}\n\n"
                 "MEMORIA DE ENTRENAMIENTO PREVIO (Fotos confirmadas por el usuario):\n"
