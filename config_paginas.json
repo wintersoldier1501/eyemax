@@ -1,7 +1,7 @@
 {
   "ARETE": {
     "catalogo1": "2-135, 379",
-    "catalogo2": "84-85"
+    "catalogo2": "none"
   },
   "PIERCING": {
     "catalogo1": "137-212",
@@ -25,7 +25,7 @@
   },
   "GRABABLE": {
     "catalogo1": "324",
-    "catalogo2": "18, 47-54, 71-91, 171-175, 211, 282-297, 356"
+    "catalogo2": "18, 47-54, 71-81, 171-175, 211, 282-297, 356"
   },
   "PERSONALIZADO": {
     "catalogo1": "341, 363, 380-384",

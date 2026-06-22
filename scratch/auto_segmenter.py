@@ -2,6 +2,7 @@ import os
 import json
 import pandas as pd
 import fitz
+import re
 
 def classify_product(name):
     name_upper = name.upper()
@@ -53,19 +54,6 @@ def classify_product(name):
         categories.append("PERSONALIZADO")
         
     return categories
-
-def filter_substring_matches(found_keys):
-    sorted_keys = sorted(found_keys, key=len, reverse=True)
-    clean_keys = []
-    for k in sorted_keys:
-        is_sub = False
-        for accepted in clean_keys:
-            if k in accepted:
-                is_sub = True
-                break
-        if not is_sub:
-            clean_keys.append(k)
-    return clean_keys
 
 def build_range_string(pages, gap_tolerance=15):
     if not pages:
@@ -157,18 +145,16 @@ def main():
                 page_num = p_idx + 1
                 text = doc[p_idx].get_text("text").upper()
                 
-                # Check which keys are present on this page
-                raw_keys = []
+                # Check which keys are present on this page using regex word boundary
+                found_keys = []
                 for clave in claves_set:
-                    if clave in text:
-                        raw_keys.append(clave)
+                    pattern = r'(?<![A-Za-z0-9])' + re.escape(clave) + r'(?![A-Za-z0-9])'
+                    if re.search(pattern, text):
+                        found_keys.append(clave)
                         
-                if not raw_keys:
+                if not found_keys:
                     continue
                     
-                # Clean up substring overlaps (e.g. AX186 matching inside AX1861-G)
-                found_keys = filter_substring_matches(raw_keys)
-                
                 # Classify the keys and add page to category lists
                 page_cats = {}
                 total_matches = 0
