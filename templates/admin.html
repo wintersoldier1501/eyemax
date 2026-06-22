@@ -322,10 +322,12 @@
         .config-inputs-row {
             display: flex;
             gap: 8px;
+            width: 100%;
         }
 
         .config-input-wrapper {
             flex: 1;
+            min-width: 0;
             display: flex;
             flex-direction: column;
             gap: 4px;
@@ -338,6 +340,8 @@
         }
 
         .config-input {
+            width: 100%;
+            min-width: 0;
             background: rgba(5, 5, 8, 0.7);
             border: 1px solid var(--color-border);
             border-radius: 6px;
