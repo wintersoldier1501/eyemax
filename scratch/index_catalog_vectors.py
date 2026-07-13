@@ -168,11 +168,12 @@ def main():
                     cx = (rect.x0 + rect.x1) / 2
                     cy = (rect.y0 + rect.y1) / 2
                     
-                    # Bounding box of 300x300 centered on the code text coordinates
+                    # Bounding box of 300x300 shifted vertically upward by 80 points
+                    # because catalog images are placed above their code texts
                     x0 = max(0, cx - 150)
-                    y0 = max(0, cy - 150)
+                    y0 = max(0, cy - 230)
                     x1 = min(page.rect.width, cx + 150)
-                    y1 = min(page.rect.height, cy + 150)
+                    y1 = min(page.rect.height, cy + 70)
                     crop_rect = fitz.Rect(x0, y0, x1, y1)
                     
                     # Render to 150 DPI

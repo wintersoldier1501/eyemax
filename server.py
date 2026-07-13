@@ -16,10 +16,19 @@ from PIL import Image
 import urllib.request
 import io
 
+# Background removal for improved scan accuracy
+try:
+    from rembg import remove as rembg_remove
+    REMBG_AVAILABLE = True
+    print("[REMBG] Módulo de eliminación de fondo cargado exitosamente.")
+except ImportError:
+    REMBG_AVAILABLE = False
+    print("[REMBG] Módulo no disponible. Las fotos escaneadas se procesarán sin eliminación de fondo.")
+
 # ONNX Local Embeddings Config
 ORT_SESSION = None
-MODEL_PATH = "scratch/clip_vision.onnx"
-MODEL_URL = "https://huggingface.co/Qdrant/clip-ViT-B-32-vision/resolve/main/model.onnx"
+MODEL_PATH = "scratch/dinov2_vision.onnx"
+MODEL_URL = "https://huggingface.co/onnx-community/dinov2-base/resolve/main/onnx/model.onnx"
 
 def initialize_onnx_model():
     global ORT_SESSION
@@ -47,7 +56,7 @@ def initialize_onnx_model():
 
 def extract_image_vector(image_bytes):
     """
-    Extrae un vector de 512 dimensiones usando el modelo CLIP ViT-B/32 ONNX
+    Extrae un vector de 768 dimensiones usando el modelo DINOv2-Base ONNX
     a partir de los bytes de una imagen.
     """
     global ORT_SESSION
@@ -57,21 +66,52 @@ def extract_image_vector(image_bytes):
         except Exception as e:
             print(f"No se pudo inicializar el modelo ONNX al extraer vector: {e}")
             return None
-        
     try:
-        img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+        img = Image.open(io.BytesIO(image_bytes))
         
-        # Redimensionar a 224x224 (entrada de CLIP)
-        img_resized = img.resize((224, 224), Image.Resampling.BILINEAR)
-        img_data = np.array(img_resized).astype(np.float32)
+        # Eliminación de fondo: aisla la joyería de manos/mesa/tela
+        if REMBG_AVAILABLE:
+            try:
+                img_nobg = rembg_remove(img)  # Returns RGBA
+                # Componer sobre fondo blanco para CLIP
+                if img_nobg.mode == 'RGBA':
+                    white_bg = Image.new('RGB', img_nobg.size, (255, 255, 255))
+                    white_bg.paste(img_nobg, mask=img_nobg.split()[3])
+                    img = white_bg
+                else:
+                    img = img_nobg.convert('RGB')
+                print("[REMBG] Fondo eliminado de la imagen escaneada.")
+            except Exception as rembg_err:
+                print(f"[REMBG] Error al eliminar fondo, usando imagen original: {rembg_err}")
+                img = img.convert('RGB')
+        else:
+            img = img.convert('RGB')
+        
+        # 1. Redimensionar para DINOv2: lado más corto a 256
+        w, h = img.size
+        if w < h:
+            new_w = 256
+            new_h = int(h * (256 / w))
+        else:
+            new_h = 256
+            new_w = int(w * (256 / h))
+        img_resized = img.resize((new_w, new_h), Image.Resampling.BICUBIC)
+        
+        # 2. Recorte central a 224x224
+        left = (new_w - 224) // 2
+        top = (new_h - 224) // 2
+        img_cropped = img_resized.crop((left, top, left + 224, top + 224))
+        
+        img_data = np.array(img_cropped).astype(np.float32)
         
         # Transponer de HWC a CHW (3, 224, 224)
         img_data = img_data.transpose(2, 0, 1)
         
-        # Normalizar con la media y desviación estándar de CLIP
-        mean = np.array([0.48145466, 0.4578275, 0.40821073]).reshape(3, 1, 1)
-        std = np.array([0.26862954, 0.26130258, 0.27577711]).reshape(3, 1, 1)
-        img_data = (img_data / 255.0 - mean) / std
+        # Normalizar para DINOv2 (ImageNet)
+        img_data = img_data / 255.0
+        mean = np.array([0.485, 0.456, 0.406]).reshape(3, 1, 1)
+        std = np.array([0.229, 0.224, 0.225]).reshape(3, 1, 1)
+        img_data = (img_data - mean) / std
         
         # Agregar dimensión de lote (1, 3, 224, 224)
         input_data = np.expand_dims(img_data, axis=0).astype(np.float32)
@@ -79,7 +119,9 @@ def extract_image_vector(image_bytes):
         # Correr inferencia
         input_name = ORT_SESSION.get_inputs()[0].name
         outputs = ORT_SESSION.run(None, {input_name: input_data})
-        vector = outputs[0][0].tolist() # Convertir a lista de floats de Python
+        # El modelo DINOv2 retorna last_hidden_state [batch, seq, dims]
+        # El token CLS es el primer elemento de la secuencia (índice 0)
+        vector = outputs[0][0][0].tolist() # Convertir a lista de floats de Python
         return vector
     except Exception as e:
         print(f"Error al extraer vector de la imagen: {e}")
@@ -113,7 +155,7 @@ def migrate_training_history():
         modified = False
         for item in history:
             vector_exists = 'vector_embeddings' in item
-            is_wrong_dim = vector_exists and len(item['vector_embeddings']) != 512
+            is_wrong_dim = vector_exists and len(item['vector_embeddings']) != 768
             if not vector_exists or is_wrong_dim:
                 image_path = item.get('image_path')
                 if image_path and os.path.exists(image_path):
@@ -141,7 +183,7 @@ CATALOG_VECTORS_DATA = []
 
 def load_catalog_vectors():
     global CATALOG_VECTORS_DATA
-    path = 'catalogo_vectores.json'
+    path = 'catalogo_vectores_dinov2.json'
     if os.path.exists(path):
         try:
             print("Cargando base de datos de vectores del catálogo para RAG...")
@@ -706,32 +748,119 @@ def get_image_path_by_hash(image_hash):
         pass
     return None
 
-def matches_category_filter(product_code, category_filter):
+CATEGORY_MAP = {
+    "ARETES": ["ARETE"],
+    "PIERCING": ["PIERCING", "EARCUFF"],
+    "ANILLO": ["ANILLO"],
+    "ANILLOS": ["ANILLO"],
+    "PULSERA": ["PULSERA"],
+    "PULSERAS": ["PULSERA"],
+    "COLLAR": ["COLLAR"],
+    "COLLARES": ["COLLAR"],
+    "LLAVERO": ["LLAVERO"],
+    "LLAVEROS": ["LLAVERO"],
+    "GRABABLE": ["GRABABLE"],
+    "GRABABLES": ["GRABABLE"],
+    "PERSONALIZADO": ["PERSONALIZADO"],
+    "PERSONALIZADOS": ["PERSONALIZADO"]
+}
+
+PAGE_CONFIG_CACHE = None
+
+def is_page_in_range(page_num, range_str):
     """
-    Verifica si la descripción de un producto coincide con la categoría seleccionada por el usuario.
+    Verifica si page_num se encuentra dentro de un string de rango como '2-135, 379' o 'none'.
     """
-    if not category_filter or category_filter.upper() in ["NINGUNO", "ALL", ""]:
-        return True
+    if not range_str or range_str.lower() == "none":
+        return False
+    parts = range_str.split(",")
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            try:
+                start, end = part.split("-")
+                if int(start) <= page_num <= int(end):
+                    return True
+            except ValueError:
+                pass
+        else:
+            try:
+                if int(part) == page_num:
+                    return True
+            except ValueError:
+                pass
+    return False
+
+def matches_category_filter_by_description(product_code, category_filter):
+    """
+    Comportamiento original de filtrado por descripción (fallback).
+    """
     prod = get_product_by_code(product_code)
     if not prod:
-        return True # Si no está en inventario, lo dejamos por seguridad
-        
+        return True
     desc = str(prod.get('DESCRIPCION', '')).upper()
-    cat = category_filter.upper()
-    
-    if cat == "ARETES":
+    cat = category_filter.upper().strip()
+    if cat in ["ARETES", "ARETE"]:
         return any(x in desc for x in ["ARETE", "STUD", "ARRACADA", "BROQUEL"])
     elif cat == "PIERCING":
         return any(x in desc for x in ["PIERCING", "EARCUFF"])
-    elif cat == "ANILLO":
+    elif cat in ["ANILLO", "ANILLOS"]:
         return "ANILLO" in desc
-    elif cat == "PULSERA":
+    elif cat in ["PULSERA", "PULSERAS"]:
         return any(x in desc for x in ["PULSERA", "BRAZALETE", "TOBILLERA"])
-    elif cat == "COLLAR":
+    elif cat in ["COLLAR", "COLLARES"]:
         return any(x in desc for x in ["COLLAR", "GARGANTILLA", "DIJE", "CADENA", "CHOKER"])
-    elif cat == "LLAVERO":
+    elif cat in ["LLAVERO", "LLAVEROS"]:
         return "LLAVERO" in desc
     return True
+
+def matches_category_filter(product_code, category_filter, catalog_name=None, page_num=None):
+    """
+    Verifica si un producto coincide con la categoría seleccionada por el usuario,
+    basándose estrictamente en los rangos de páginas reales configurados en config_paginas.json.
+    """
+    if not category_filter or category_filter.upper() in ["NINGUNO", "ALL", ""]:
+        return True
+        
+    cat = category_filter.upper().strip()
+    
+    # Obtener las categorías mapeadas
+    target_cats = CATEGORY_MAP.get(cat)
+    if not target_cats:
+        return matches_category_filter_by_description(product_code, category_filter)
+        
+    # Buscar catálogo y página si no se proveen
+    if not catalog_name or not page_num:
+        catalog_name, page_num = find_page_for_code(product_code)
+        
+    if not catalog_name or not page_num:
+        return matches_category_filter_by_description(product_code, category_filter)
+        
+    # Normalizar nombre del catálogo para el JSON de páginas
+    cat_key = None
+    if "CATALOGO 1" in catalog_name.upper():
+        cat_key = "catalogo1"
+    elif "CATALOGO 2" in catalog_name.upper():
+        cat_key = "catalogo2"
+        
+    if not cat_key:
+        return matches_category_filter_by_description(product_code, category_filter)
+        
+    # Cargar la configuración de páginas
+    global PAGE_CONFIG_CACHE
+    if PAGE_CONFIG_CACHE is None:
+        PAGE_CONFIG_CACHE = load_page_config()
+        
+    # Verificar contra los rangos oficiales de las categorías mapeadas
+    for t_cat in target_cats:
+        ranges = PAGE_CONFIG_CACHE.get(t_cat, {})
+        range_str = ranges.get(cat_key, "none")
+        if is_page_in_range(page_num, range_str):
+            return True
+            
+    return False
 
 def get_product_by_code(code):
     """Busca un producto en el inventario por su clave y lo mapea para compatibilidad con el frontend."""
@@ -890,8 +1019,8 @@ def recognize_product():
                             
                 # Ordenar por similitud
                 sorted_cat_scores = sorted(cat_scores.items(), key=lambda x: x[1]['sim'], reverse=True)
-                # Tomar los 3 mejores candidatos
-                for code, score_data in sorted_cat_scores[:3]:
+                # Tomar los 7 mejores candidatos para mayor cobertura
+                for code, score_data in sorted_cat_scores[:7]:
                     catalog_candidates.append({
                         'codigo': code,
                         'sim': score_data['sim'],
@@ -1090,13 +1219,14 @@ def recognize_product():
         if rag_contents:
             rag_instruction = (
                 "BÚSQUEDA VECTORIAL SEMÁNTICA (Múltiples opciones sugeridas):\n"
-                "Para ayudarte a decidir, nuestro sistema local ha pre-seleccionado las 3 imágenes del catálogo más parecidas visualmente:\n"
+                "Para ayudarte a decidir, nuestro sistema local ha pre-seleccionado las 7 imágenes del catálogo más parecidas visualmente:\n"
                 f"{candidates_prompt_text}\n\n"
                 "Instrucciones:\n"
                 "1. Compara minuciosamente los detalles, cierres, texturas y formas de la imagen real escaneada con las imágenes de los candidatos provistos.\n"
                 "2. Si la foto escaneada coincide visualmente con uno de los candidatos con alta confianza (90% o más), selecciona ese código y colócalo en 'codigo_exacto'.\n"
                 "3. Si crees que coincide pero tienes alguna duda, pon el estatus en 'DUDA' y coloca las claves en 'opciones_sugeridas' en orden de relevancia.\n"
-                "4. Presta especial atención al material y color del metal. Si la foto escaneada es de color plata, debe coincidir con el código plateado."
+                "4. Presta especial atención al material y color del metal. Si la foto escaneada es de color plata, debe coincidir con el código plateado.\n"
+                "5. Presta atención a la FORMA exacta de la pieza: moños, flores, estrellas, corazones, etc. No confundas formas similares."
             )
         else:
             rag_instruction = (
