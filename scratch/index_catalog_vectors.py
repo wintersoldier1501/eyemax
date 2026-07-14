@@ -10,8 +10,8 @@ import io
 import sys
 
 EXCEL_PATH = 'MICROSIP.xlsx'
-VECTORS_INDEX_PATH = 'catalogo_vectores.json'
-MODEL_PATH = "scratch/clip_vision.onnx"
+VECTORS_INDEX_PATH = 'catalogo_vectores_dinov2.json'
+MODEL_PATH = "scratch/dinov2_vision.onnx"
 CROPS_DIR = "assets/catalog_crops"
 
 def main():
@@ -42,16 +42,16 @@ def main():
             with open(VECTORS_INDEX_PATH, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 for item in data:
-                    # Solo reutilizar si tiene la dimensión correcta (512 de CLIP)
-                    if 'vector_embeddings' in item and len(item['vector_embeddings']) == 512:
+                    # Solo reutilizar si tiene la dimensión correcta (768 de DINOv2)
+                    if 'vector_embeddings' in item and len(item['vector_embeddings']) == 768:
                         existing_index[item['codigo']] = item
-            print(f"Cargado índice existente con {len(existing_index)} registros en formato CLIP (512d).")
+            print(f"Cargado índice existente con {len(existing_index)} registros en formato DINOv2 (768d).")
         except Exception as e:
             print(f"Error al leer índice existente: {e}")
 
     # 3. Load PDF texts to memory for ultra-fast string matching
     print("Cargando textos de los PDFs a memoria para búsqueda rápida...")
-    pdf_files = [("CATALOGO 1.pdf", "CATALOGO 1.pdf"), ("CATALOGO 2.pdf", "CATALOGO 2.pdf")]
+    pdf_files = [(f, f) for f in os.listdir('.') if f.lower().endswith('.pdf')]
     pdf_docs = {}
     pdf_texts = {}
 
@@ -90,15 +90,34 @@ def main():
 
     def extract_vector(image_bytes):
         img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
-        img_resized = img.resize((224, 224), Image.Resampling.BILINEAR)
-        img_data = np.array(img_resized).astype(np.float32)
+        
+        # 1. Redimensionar para DINOv2: lado más corto a 256
+        w, h = img.size
+        if w < h:
+            new_w = 256
+            new_h = int(h * (256 / w))
+        else:
+            new_h = 256
+            new_w = int(w * (256 / h))
+        img_resized = img.resize((new_w, new_h), Image.Resampling.BICUBIC)
+        
+        # 2. Recorte central a 224x224
+        left = (new_w - 224) // 2
+        top = (new_h - 224) // 2
+        img_cropped = img_resized.crop((left, top, left + 224, top + 224))
+        
+        img_data = np.array(img_cropped).astype(np.float32)
         img_data = img_data.transpose(2, 0, 1)
-        mean = np.array([0.48145466, 0.4578275, 0.40821073]).reshape(3, 1, 1)
-        std = np.array([0.26862954, 0.26130258, 0.27577711]).reshape(3, 1, 1)
-        img_data = (img_data / 255.0 - mean) / std
+        
+        # Normalizar para DINOv2 (ImageNet)
+        img_data = img_data / 255.0
+        mean = np.array([0.485, 0.456, 0.406]).reshape(3, 1, 1)
+        std = np.array([0.229, 0.224, 0.225]).reshape(3, 1, 1)
+        img_data = (img_data - mean) / std
+        
         input_data = np.expand_dims(img_data, axis=0).astype(np.float32)
         outputs = ort_session.run(None, {input_name: input_data})
-        return outputs[0][0].tolist()
+        return outputs[0][0][0].tolist()
 
     # 5. Processing Loop
     indexed_count = 0
