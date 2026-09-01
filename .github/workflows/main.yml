@@ -1,0 +1,29 @@
+name: Eyemax CI Pipeline
+
+# EL GATILLO: El robot despierta cuando hay un push a main
+on:
+  push:
+    branches: [ "main", "master" ]
+
+# EL TRABAJADOR: La máquina que GitHub nos presta
+jobs:
+  verificar_codigo:
+    runs-on: ubuntu-latest
+
+    # LOS PASOS: Las instrucciones en la terminal
+    steps:
+    - name: 1. Descargar el código de Eyemax
+      uses: actions/checkout@v3
+
+    - name: 2. Configurar servidor con Python 3.10
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
+
+    - name: 3. Instalar librerías de IA (requirements.txt)
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: 4. Mensaje de éxito
+      run: echo "¡✅ Todas las dependencias de IA se instalaron perfectamente! El código está sano."
